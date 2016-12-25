@@ -254,9 +254,10 @@ public class MessageParser extends AbstractParser implements OnMessagePacketRece
 				mXmppConnectionService.updateAccountUi();
 			}
 		} else if (AxolotlService.PEP_DEVICE_LIST.equals(node)) {
-			Log.d(Config.LOGTAG, AxolotlService.getLogprefix(account)+"Received PEP device list update from "+ from + ", processing...");
+
 			Element item = items.findChild("item");
 			Set<Integer> deviceIds = mXmppConnectionService.getIqParser().deviceIds(item);
+			Log.d(Config.LOGTAG, AxolotlService.getLogprefix(account)+"Received PEP device list ("+deviceIds+") update from "+ from + ", processing...");
 			AxolotlService axolotlService = account.getAxolotlService();
 			axolotlService.registerDevices(from, deviceIds);
 			mXmppConnectionService.updateAccountUi();
@@ -484,7 +485,8 @@ public class MessageParser extends AbstractParser implements OnMessagePacketRece
 							|| replacedMessage.getFingerprint().equals(message.getFingerprint());
 					final boolean trueCountersMatch = replacedMessage.getTrueCounterpart() != null
 							&& replacedMessage.getTrueCounterpart().equals(message.getTrueCounterpart());
-					if (fingerprintsMatch && (trueCountersMatch || !conversationMultiMode)) {
+					final boolean duplicate = conversation.hasDuplicateMessage(message);
+					if (fingerprintsMatch && (trueCountersMatch || !conversationMultiMode) && !duplicate) {
 						Log.d(Config.LOGTAG, "replaced message '" + replacedMessage.getBody() + "' with '" + message.getBody() + "'");
 						synchronized (replacedMessage) {
 							final String uuid = replacedMessage.getUuid();
@@ -650,9 +652,9 @@ public class MessageParser extends AbstractParser implements OnMessagePacketRece
 			}
 		}
 
-		Element event = packet.findChild("event", "http://jabber.org/protocol/pubsub#event");
+		Element event = original.findChild("event", "http://jabber.org/protocol/pubsub#event");
 		if (event != null) {
-			parseEvent(event, from, account);
+			parseEvent(event, original.getFrom(), account);
 		}
 
 		String nick = packet.findChildContent("nick", "http://jabber.org/protocol/nick");
