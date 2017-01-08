@@ -49,13 +49,8 @@ ext {
 }
 
 android {
-<<<<<<< HEAD
-    compileSdkVersion 24
-    buildToolsVersion "25"
-=======
     compileSdkVersion 25
     buildToolsVersion "25.0.2"
->>>>>>> 39c8867ed7a13480f29e35ac1c5fdd5db62fcff8
 
     defaultConfig {
         minSdkVersion 14
