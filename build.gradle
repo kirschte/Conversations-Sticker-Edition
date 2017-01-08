@@ -23,10 +23,10 @@ configurations {
 
 dependencies {
     compile project(':libs:MemorizingTrustManager')
-    playstoreCompile 'com.google.android.gms:play-services-gcm:9.4.0'
+    playstoreCompile 'com.google.android.gms:play-services-gcm:10.0.1'
     compile 'org.sufficientlysecure:openpgp-api:10.0'
     compile 'com.soundcloud.android:android-crop:1.0.1@aar'
-    compile 'com.android.support:support-v13:24.2.0'
+    compile 'com.android.support:support-v13:25.1.0'
     compile 'org.bouncycastle:bcprov-jdk15on:1.52'
     compile 'org.bouncycastle:bcmail-jdk15on:1.52'
     compile 'org.jitsi:org.otr4j:0.22'
@@ -49,12 +49,17 @@ ext {
 }
 
 android {
+<<<<<<< HEAD
     compileSdkVersion 24
     buildToolsVersion "25"
+=======
+    compileSdkVersion 25
+    buildToolsVersion "25.0.2"
+>>>>>>> 39c8867ed7a13480f29e35ac1c5fdd5db62fcff8
 
     defaultConfig {
         minSdkVersion 14
-        targetSdkVersion 24
+        targetSdkVersion 25
         versionCode 188
         versionName "1.15.2"
         archivesBaseName += "-$versionName"
