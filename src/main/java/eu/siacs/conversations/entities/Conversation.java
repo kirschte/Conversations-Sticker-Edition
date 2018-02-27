@@ -2,6 +2,7 @@ package eu.siacs.conversations.entities;
 
 import android.content.ContentValues;
 import android.database.Cursor;
+import android.support.annotation.NonNull;
 
 import net.java.otr4j.OtrException;
 import net.java.otr4j.crypto.OtrCryptoException;
@@ -15,12 +16,13 @@ import org.json.JSONObject;
 
 import java.security.interfaces.DSAPublicKey;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.Iterator;
 import java.util.List;
+import java.util.ListIterator;
 import java.util.Locale;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import eu.siacs.conversations.Config;
 import eu.siacs.conversations.crypto.PgpDecryptionService;
@@ -28,6 +30,7 @@ import eu.siacs.conversations.crypto.axolotl.AxolotlService;
 import eu.siacs.conversations.xmpp.chatstate.ChatState;
 import eu.siacs.conversations.xmpp.jid.InvalidJidException;
 import eu.siacs.conversations.xmpp.jid.Jid;
+import eu.siacs.conversations.xmpp.mam.MamReference;
 
 
 public class Conversation extends AbstractEntity implements Blockable, Comparable<Conversation> {
@@ -35,7 +38,6 @@ public class Conversation extends AbstractEntity implements Blockable, Comparabl
 
 	public static final int STATUS_AVAILABLE = 0;
 	public static final int STATUS_ARCHIVED = 1;
-	public static final int STATUS_DELETED = 2;
 
 	public static final int MODE_MULTI = 1;
 	public static final int MODE_SINGLE = 0;
@@ -49,13 +51,17 @@ public class Conversation extends AbstractEntity implements Blockable, Comparabl
 	public static final String MODE = "mode";
 	public static final String ATTRIBUTES = "attributes";
 
-	public static final String ATTRIBUTE_NEXT_ENCRYPTION = "next_encryption";
-	public static final String ATTRIBUTE_MUC_PASSWORD = "muc_password";
 	public static final String ATTRIBUTE_MUTED_TILL = "muted_till";
 	public static final String ATTRIBUTE_ALWAYS_NOTIFY = "always_notify";
-	public static final String ATTRIBUTE_CRYPTO_TARGETS = "crypto_targets";
 	public static final String ATTRIBUTE_LAST_CLEAR_HISTORY = "last_clear_history";
+	public static final String ATTRIBUTE_NEXT_MESSAGE = "next_message";
 
+	private static final String ATTRIBUTE_CRYPTO_TARGETS = "crypto_targets";
+
+	private static final String ATTRIBUTE_NEXT_ENCRYPTION = "next_encryption";
+	static final String ATTRIBUTE_MUC_PASSWORD = "muc_password";
+
+	private String draftMessage;
 	private String name;
 	private String contactUuid;
 	private String accountUuid;
@@ -76,13 +82,9 @@ public class Conversation extends AbstractEntity implements Blockable, Comparabl
 	private transient String otrFingerprint = null;
 	private Smp mSmp = new Smp();
 
-	private String nextMessage;
-
 	private transient MucOptions mucOptions = null;
 
 	private byte[] symmetricKey;
-
-	private Bookmark bookmark;
 
 	private boolean messagesLeftOnServer = true;
 	private ChatState mOutgoingChatState = Config.DEFAULT_CHATSTATE;
@@ -90,6 +92,7 @@ public class Conversation extends AbstractEntity implements Blockable, Comparabl
 	private String mLastReceivedOtrMessageId = null;
 	private String mFirstMamReference = null;
 	private Message correctingMessage;
+	public AtomicBoolean messagesLoaded = new AtomicBoolean(true);
 
 	public boolean hasMessagesLeftOnServer() {
 		return messagesLeftOnServer;
@@ -162,7 +165,7 @@ public class Conversation extends AbstractEntity implements Blockable, Comparabl
 			for (final Message message : this.messages) {
 				if (message.getUuid().equals(uuid)
 						&& message.getEncryption() != Message.ENCRYPTION_PGP
-						&& (message.getType() == Message.TYPE_IMAGE || message.getType() == Message.TYPE_FILE || message.treatAsDownloadable() != Message.Decision.NEVER)) {
+						&& (message.getType() == Message.TYPE_IMAGE || message.getType() == Message.TYPE_FILE || message.treatAsDownloadable())) {
 					return message;
 				}
 			}
@@ -189,15 +192,13 @@ public class Conversation extends AbstractEntity implements Blockable, Comparabl
 	}
 
 	public boolean setOutgoingChatState(ChatState state) {
-		if (mode == MODE_MULTI) {
-			return false;
+		if (mode == MODE_SINGLE && !getContact().isSelf() || (isPrivateAndNonAnonymous() && getNextCounterpart() == null)) {
+			if (this.mOutgoingChatState != state) {
+				this.mOutgoingChatState = state;
+				return true;
+			}
 		}
-		if (this.mOutgoingChatState != state) {
-			this.mOutgoingChatState = state;
-			return true;
-		} else {
-			return false;
-		}
+		return false;
 	}
 
 	public ChatState getOutgoingChatState() {
@@ -262,7 +263,7 @@ public class Conversation extends AbstractEntity implements Blockable, Comparabl
 				if (counterpart.equals(message.getCounterpart())
 						&& ((message.getStatus() == Message.STATUS_RECEIVED) == received)
 						&& (carbon == message.isCarbon() || received) ) {
-					if (id.equals(message.getRemoteMsgId())) {
+					if (id.equals(message.getRemoteMsgId()) && !message.isFileOrImage() && !message.treatAsDownloadable()) {
 						return message;
 					} else {
 						return null;
@@ -282,6 +283,29 @@ public class Conversation extends AbstractEntity implements Blockable, Comparabl
 			}
 		}
 		return null;
+	}
+
+	public Message findMessageWithRemoteId(String id, Jid counterpart) {
+		synchronized (this.messages) {
+			for(Message message : this.messages) {
+				if (counterpart.equals(message.getCounterpart())
+						&& (id.equals(message.getRemoteMsgId()) || id.equals(message.getUuid()))) {
+					return message;
+				}
+			}
+		}
+		return null;
+	}
+
+	public boolean hasMessageWithCounterpart(Jid counterpart) {
+		synchronized (this.messages) {
+			for(Message message : this.messages) {
+				if (counterpart.equals(message.getCounterpart())) {
+					return true;
+				}
+			}
+		}
+		return false;
 	}
 
 	public void populateWithMessages(final List<Message> messages) {
@@ -333,17 +357,21 @@ public class Conversation extends AbstractEntity implements Blockable, Comparabl
 		return this.mFirstMamReference;
 	}
 
-	public void setLastClearHistory(long time) {
-		setAttribute(ATTRIBUTE_LAST_CLEAR_HISTORY,String.valueOf(time));
+	public void setLastClearHistory(long time,String reference) {
+		if (reference != null) {
+			setAttribute(ATTRIBUTE_LAST_CLEAR_HISTORY, String.valueOf(time) + ":" + reference);
+		} else {
+			setAttribute(ATTRIBUTE_LAST_CLEAR_HISTORY, String.valueOf(time));
+		}
 	}
 
-	public long getLastClearHistory() {
-		return getLongAttribute(ATTRIBUTE_LAST_CLEAR_HISTORY, 0);
+	public MamReference getLastClearHistory() {
+		return MamReference.fromAttribute(getAttribute(ATTRIBUTE_LAST_CLEAR_HISTORY));
 	}
 
 	public List<Jid> getAcceptedCryptoTargets() {
 		if (mode == MODE_SINGLE) {
-			return Arrays.asList(getJid().toBareJid());
+			return Collections.singletonList(getJid().toBareJid());
 		} else {
 			return getJidListAttribute(ATTRIBUTE_CRYPTO_TARGETS);
 		}
@@ -353,8 +381,9 @@ public class Conversation extends AbstractEntity implements Blockable, Comparabl
 		setAttribute(ATTRIBUTE_CRYPTO_TARGETS, acceptedTargets);
 	}
 
-	public void setCorrectingMessage(Message correctingMessage) {
+	public boolean setCorrectingMessage(Message correctingMessage) {
 		this.correctingMessage = correctingMessage;
+		return correctingMessage == null && draftMessage != null;
 	}
 
 	public Message getCorrectingMessage() {
@@ -366,7 +395,7 @@ public class Conversation extends AbstractEntity implements Blockable, Comparabl
 	}
 
 	@Override
-	public int compareTo(Conversation another) {
+	public int compareTo(@NonNull Conversation another) {
 		final Message left = getLatestMessage();
 		final Message right = another.getLatestMessage();
 		if (left.getTimeSent() > right.getTimeSent()) {
@@ -376,6 +405,14 @@ public class Conversation extends AbstractEntity implements Blockable, Comparabl
 		} else {
 			return 0;
 		}
+	}
+
+	public void setDraftMessage(String draftMessage) {
+		this.draftMessage = draftMessage;
+	}
+
+	public String getDraftMessage() {
+		return draftMessage;
 	}
 
 	public interface OnMessageFound {
@@ -425,40 +462,42 @@ public class Conversation extends AbstractEntity implements Blockable, Comparabl
 		return unread;
 	}
 
-	public Message getLatestMarkableMessage() {
-		for (int i = this.messages.size() - 1; i >= 0; --i) {
-			if (this.messages.get(i).getStatus() <= Message.STATUS_RECEIVED
-					&& this.messages.get(i).markable) {
-				if (this.messages.get(i).isRead()) {
-					return null;
-				} else {
-					return this.messages.get(i);
+	public Message getLatestMarkableMessage(boolean isPrivateAndNonAnonymousMuc) {
+		synchronized (this.messages) {
+			for (int i = this.messages.size() - 1; i >= 0; --i) {
+				final Message message = this.messages.get(i);
+				if (message.getStatus() <= Message.STATUS_RECEIVED
+						&& (message.markable || isPrivateAndNonAnonymousMuc)
+						&& message.getType() != Message.TYPE_PRIVATE) {
+					return message.isRead() ? null : message;
 				}
-					}
+			}
 		}
 		return null;
 	}
 
 	public Message getLatestMessage() {
-		if (this.messages.size() == 0) {
-			Message message = new Message(this, "", Message.ENCRYPTION_NONE);
-			message.setTime(getCreated());
-			return message;
-		} else {
-			Message message = this.messages.get(this.messages.size() - 1);
-			message.setConversation(this);
-			return message;
+		synchronized (this.messages) {
+			if (this.messages.size() == 0) {
+				Message message = new Message(this, "", Message.ENCRYPTION_NONE);
+				message.setType(Message.TYPE_STATUS);
+				message.setTime(Math.max(getCreated(), getLastClearHistory().getTimestamp()));
+				return message;
+			} else {
+				return this.messages.get(this.messages.size() - 1);
+			}
 		}
 	}
 
 	public String getName() {
 		if (getMode() == MODE_MULTI) {
-			if (getMucOptions().getSubject() != null) {
-				return getMucOptions().getSubject();
-			} else if (bookmark != null
-					&& bookmark.getBookmarkName() != null
-					&& !bookmark.getBookmarkName().trim().isEmpty()) {
-				return bookmark.getBookmarkName().trim();
+			final String subject = getMucOptions().getSubject();
+			Bookmark bookmark = getBookmark();
+			final String bookmarkName = bookmark != null ? bookmark.getBookmarkName() : null;
+			if (subject != null && !subject.trim().isEmpty()) {
+				return subject;
+			} else if (bookmarkName != null && !bookmarkName.trim().isEmpty()) {
+				return bookmarkName;
 			} else {
 				String generatedName = getMucOptions().createNameFromParticipants();
 				if (generatedName != null) {
@@ -467,6 +506,8 @@ public class Conversation extends AbstractEntity implements Blockable, Comparabl
 					return getJid().getUnescapedLocalpart();
 				}
 			}
+		} else if (isWithStranger()) {
+			return contactJid.toBareJid().toString();
 		} else {
 			return this.getContact().getDisplayName();
 		}
@@ -653,8 +694,12 @@ public class Conversation extends AbstractEntity implements Blockable, Comparabl
 	/**
 	 * short for is Private and Non-anonymous
 	 */
-	private boolean isPnNA() {
-		return mode == MODE_SINGLE || (getMucOptions().membersOnly() && getMucOptions().nonanonymous());
+	public boolean isSingleOrPrivateAndNonAnonymous() {
+		return mode == MODE_SINGLE || isPrivateAndNonAnonymous();
+	}
+
+	public boolean isPrivateAndNonAnonymous() {
+		return getMucOptions().isPrivateAndNonAnonymous();
 	}
 
 	public synchronized MucOptions getMucOptions() {
@@ -680,25 +725,41 @@ public class Conversation extends AbstractEntity implements Blockable, Comparabl
 		return this.nextCounterpart;
 	}
 
-	private int getMostRecentlyUsedIncomingEncryption() {
-		synchronized (this.messages) {
-			for(int i = this.messages.size() -1; i >= 0; --i) {
-				final Message m = this.messages.get(i);
-				if (m.getStatus() == Message.STATUS_RECEIVED) {
-					final int e = m.getEncryption();
-					if (e == Message.ENCRYPTION_DECRYPTED || e == Message.ENCRYPTION_DECRYPTION_FAILED) {
-						return Message.ENCRYPTION_PGP;
-					} else {
-						return e;
-					}
-				}
-			}
-		}
-		return Message.ENCRYPTION_NONE;
+	public int getNextEncryption() {
+		return fixAvailableEncryption(this.getIntAttribute(ATTRIBUTE_NEXT_ENCRYPTION, getDefaultEncryption()));
 	}
 
-	public int getNextEncryption() {
-		return Math.max(this.getIntAttribute(ATTRIBUTE_NEXT_ENCRYPTION, Message.ENCRYPTION_NONE), Message.ENCRYPTION_NONE);
+	private int fixAvailableEncryption(int selectedEncryption) {
+		switch(selectedEncryption) {
+			case Message.ENCRYPTION_NONE:
+				return Config.supportUnencrypted() ? selectedEncryption : getDefaultEncryption();
+			case Message.ENCRYPTION_AXOLOTL:
+				return Config.supportOmemo() ? selectedEncryption : getDefaultEncryption();
+			case Message.ENCRYPTION_OTR:
+				return Config.supportOtr() ? selectedEncryption : getDefaultEncryption();
+			case Message.ENCRYPTION_PGP:
+			case Message.ENCRYPTION_DECRYPTED:
+			case Message.ENCRYPTION_DECRYPTION_FAILED:
+				return Config.supportOpenPgp() ? Message.ENCRYPTION_PGP : getDefaultEncryption();
+			default:
+				return getDefaultEncryption();
+		}
+	}
+
+	private int getDefaultEncryption() {
+		AxolotlService axolotlService = account.getAxolotlService();
+		if (Config.supportUnencrypted()) {
+			return Message.ENCRYPTION_NONE;
+		} else if (Config.supportOmemo()
+				&& (axolotlService != null && axolotlService.isConversationAxolotlCapable(this) || !Config.multipleEncryptionChoices())) {
+			return Message.ENCRYPTION_AXOLOTL;
+		} else if (Config.supportOtr() && mode == MODE_SINGLE) {
+			return Message.ENCRYPTION_OTR;
+		} else if (Config.supportOpenPgp()) {
+			return Message.ENCRYPTION_PGP;
+		} else {
+			return Message.ENCRYPTION_NONE;
+		}
 	}
 
 	public void setNextEncryption(int encryption) {
@@ -706,19 +767,18 @@ public class Conversation extends AbstractEntity implements Blockable, Comparabl
 	}
 
 	public String getNextMessage() {
-		if (this.nextMessage == null) {
-			return "";
-		} else {
-			return this.nextMessage;
-		}
+		final String nextMessage = getAttribute(ATTRIBUTE_NEXT_MESSAGE);
+		return nextMessage == null ? "" : nextMessage;
 	}
 
 	public boolean smpRequested() {
 		return smp().status == Smp.STATUS_CONTACT_REQUESTED;
 	}
 
-	public void setNextMessage(String message) {
-		this.nextMessage = message;
+	public boolean setNextMessage(String message) {
+		boolean changed = !getNextMessage().equals(message);
+		this.setAttribute(ATTRIBUTE_NEXT_MESSAGE, message);
+		return changed;
 	}
 
 	public void setSymmetricKey(byte[] key) {
@@ -729,30 +789,23 @@ public class Conversation extends AbstractEntity implements Blockable, Comparabl
 		return this.symmetricKey;
 	}
 
-	public void setBookmark(Bookmark bookmark) {
-		this.bookmark = bookmark;
-		this.bookmark.setConversation(this);
-	}
-
-	public void deregisterWithBookmark() {
-		if (this.bookmark != null) {
-			this.bookmark.setConversation(null);
-		}
-	}
-
 	public Bookmark getBookmark() {
-		return this.bookmark;
+		return this.account.getBookmark(this.contactJid);
 	}
 
-	public boolean hasDuplicateMessage(Message message) {
+	public Message findDuplicateMessage(Message message) {
 		synchronized (this.messages) {
 			for (int i = this.messages.size() - 1; i >= 0; --i) {
 				if (this.messages.get(i).similar(message)) {
-					return true;
+					return this.messages.get(i);
 				}
 			}
 		}
-		return false;
+		return null;
+	}
+
+	public boolean hasDuplicateMessage(Message message) {
+		return findDuplicateMessage(message) != null;
 	}
 
 	public Message findSentMessageWithBody(String body) {
@@ -775,19 +828,22 @@ public class Conversation extends AbstractEntity implements Blockable, Comparabl
 		}
 	}
 
-	public long getLastMessageTransmitted() {
-		final long last_clear = getLastClearHistory();
-		long last_received = 0;
+	public MamReference getLastMessageTransmitted() {
+		final MamReference lastClear = getLastClearHistory();
+		MamReference lastReceived = new MamReference(0);
 		synchronized (this.messages) {
 			for(int i = this.messages.size() - 1; i >= 0; --i) {
-				Message message = this.messages.get(i);
-				if (message.getStatus() == Message.STATUS_RECEIVED || message.isCarbon()) {
-					last_received = message.getTimeSent();
+				final Message message = this.messages.get(i);
+				if (message.getType() == Message.TYPE_PRIVATE) {
+					continue; //it's unsafe to use private messages as anchor. They could be coming from user archive
+				}
+				if (message.getStatus() == Message.STATUS_RECEIVED || message.isCarbon() || message.getServerMsgId() != null) {
+					lastReceived = new MamReference(message.getTimeSent(),message.getServerMsgId());
 					break;
 				}
 			}
 		}
-		return Math.max(last_clear,last_received);
+		return MamReference.max(lastClear,lastReceived);
 	}
 
 	public void setMutedTill(long value) {
@@ -799,13 +855,13 @@ public class Conversation extends AbstractEntity implements Blockable, Comparabl
 	}
 
 	public boolean alwaysNotify() {
-		return mode == MODE_SINGLE || getBooleanAttribute(ATTRIBUTE_ALWAYS_NOTIFY, Config.ALWAYS_NOTIFY_BY_DEFAULT || isPnNA());
+		return mode == MODE_SINGLE || getBooleanAttribute(ATTRIBUTE_ALWAYS_NOTIFY, Config.ALWAYS_NOTIFY_BY_DEFAULT || isPrivateAndNonAnonymous());
 	}
 
 	public boolean setAttribute(String key, String value) {
 		synchronized (this.attributes) {
 			try {
-				this.attributes.put(key, value);
+				this.attributes.put(key, value == null ? "" : value);
 				return true;
 			} catch (JSONException e) {
 				return false;
@@ -839,7 +895,7 @@ public class Conversation extends AbstractEntity implements Blockable, Comparabl
 		}
 	}
 
-	public List<Jid> getJidListAttribute(String key) {
+	private List<Jid> getJidListAttribute(String key) {
 		ArrayList<Jid> list = new ArrayList<>();
 		synchronized (this.attributes) {
 			try {
@@ -858,7 +914,7 @@ public class Conversation extends AbstractEntity implements Blockable, Comparabl
 		return list;
 	}
 
-	public int getIntAttribute(String key, int defaultValue) {
+	private int getIntAttribute(String key, int defaultValue) {
 		String value = this.getAttribute(key);
 		if (value == null) {
 			return defaultValue;
@@ -884,7 +940,7 @@ public class Conversation extends AbstractEntity implements Blockable, Comparabl
 		}
 	}
 
-	public boolean getBooleanAttribute(String key, boolean defaultValue) {
+	private boolean getBooleanAttribute(String key, boolean defaultValue) {
 		String value = this.getAttribute(key);
 		if (value == null) {
 			return defaultValue;
@@ -894,16 +950,14 @@ public class Conversation extends AbstractEntity implements Blockable, Comparabl
 	}
 
 	public void add(Message message) {
-		message.setConversation(this);
 		synchronized (this.messages) {
 			this.messages.add(message);
 		}
 	}
 
-	public void prepend(Message message) {
-		message.setConversation(this);
+	public void prepend(int offset, Message message) {
 		synchronized (this.messages) {
-			this.messages.add(0,message);
+			this.messages.add(Math.min(offset,this.messages.size()),message);
 		}
 	}
 
@@ -912,6 +966,17 @@ public class Conversation extends AbstractEntity implements Blockable, Comparabl
 			this.messages.addAll(index, messages);
 		}
 		account.getPgpDecryptionService().decrypt(messages);
+	}
+
+	public void expireOldMessages(long timestamp) {
+		synchronized (this.messages) {
+			for(ListIterator<Message> iterator = this.messages.listIterator(); iterator.hasNext();) {
+				if (iterator.next().getTimeSent() < timestamp) {
+					iterator.remove();
+				}
+			}
+			untieMessages();
+		}
 	}
 
 	public void sort() {
@@ -949,6 +1014,37 @@ public class Conversation extends AbstractEntity implements Blockable, Comparabl
 			}
 			return count;
 		}
+	}
+
+	public int receivedMessagesCount() {
+		int count = 0;
+		synchronized (this.messages) {
+			for(Message message : messages) {
+				if (message.getStatus() == Message.STATUS_RECEIVED) {
+					++count;
+				}
+			}
+		}
+		return count;
+	}
+
+	private int sentMessagesCount() {
+		int count = 0;
+		synchronized (this.messages) {
+			for(Message message : messages) {
+				if (message.getStatus() != Message.STATUS_RECEIVED) {
+					++count;
+				}
+			}
+		}
+		return count;
+	}
+
+	public boolean isWithStranger() {
+		return mode == MODE_SINGLE
+				&& !getJid().equals(account.getJid().toDomainJid())
+				&& !getContact().showInRoster()
+				&& sentMessagesCount() == 0;
 	}
 
 	public class Smp {

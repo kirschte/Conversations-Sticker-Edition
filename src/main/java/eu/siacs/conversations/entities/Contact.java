@@ -15,6 +15,7 @@ import java.util.List;
 import java.util.Locale;
 
 import eu.siacs.conversations.Config;
+import eu.siacs.conversations.utils.JidHelper;
 import eu.siacs.conversations.utils.UIHelper;
 import eu.siacs.conversations.xml.Element;
 import eu.siacs.conversations.xmpp.jid.InvalidJidException;
@@ -112,16 +113,16 @@ public class Contact implements ListItem, Blockable {
 	}
 
 	public String getDisplayName() {
-		if (this.commonName != null && Config.X509_VERIFICATION) {
+		if (Config.X509_VERIFICATION && this.commonName != null && !this.commonName.isEmpty()) {
 			return this.commonName;
-		} else if (this.systemName != null) {
+		} else if (this.systemName != null && !this.systemName.isEmpty()) {
 			return this.systemName;
-		} else if (this.serverName != null) {
+		} else if (this.serverName != null && !this.serverName.isEmpty()) {
 			return this.serverName;
-		} else if (this.presenceName != null && mutualPresenceSubscription()) {
+		} else if (this.presenceName != null && !this.presenceName.isEmpty() && mutualPresenceSubscription() ) {
 			return this.presenceName;
 		} else if (jid.hasLocalpart()) {
-			return jid.getUnescapedLocalpart();
+			return JidHelper.localPartOrFallback(jid);
 		} else {
 			return jid.getDomainpart();
 		}
@@ -255,12 +256,16 @@ public class Contact implements ListItem, Blockable {
 		this.serverName = serverName;
 	}
 
-	public void setSystemName(String systemName) {
+	public boolean setSystemName(String systemName) {
+		final String old = getDisplayName();
 		this.systemName = systemName;
+		return !old.equals(getDisplayName());
 	}
 
-	public void setPresenceName(String presenceName) {
+	public boolean setPresenceName(String presenceName) {
+		final String old = getDisplayName();
 		this.presenceName = presenceName;
+		return !old.equals(getDisplayName());
 	}
 
 	public Uri getSystemAccount() {
@@ -526,8 +531,13 @@ public class Contact implements ListItem, Blockable {
 		return this.mActive;
 	}
 
-	public void setLastseen(long timestamp) {
-		this.mLastseen = Math.max(timestamp, mLastseen);
+	public boolean setLastseen(long timestamp) {
+		if (timestamp > this.mLastseen) {
+			this.mLastseen = timestamp;
+			return true;
+		} else {
+			return false;
+		}
 	}
 
 	public long getLastseen() {

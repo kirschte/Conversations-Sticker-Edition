@@ -7,7 +7,12 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
+import eu.siacs.conversations.Config;
 import eu.siacs.conversations.R;
+import eu.siacs.conversations.utils.JidHelper;
+import eu.siacs.conversations.utils.UIHelper;
+import eu.siacs.conversations.xml.Namespace;
+import eu.siacs.conversations.xmpp.chatstate.ChatState;
 import eu.siacs.conversations.xmpp.forms.Data;
 import eu.siacs.conversations.xmpp.forms.Field;
 import eu.siacs.conversations.xmpp.jid.InvalidJidException;
@@ -46,6 +51,18 @@ public class MucOptions {
 
 	public boolean autoPushConfiguration() {
 		return mAutoPushConfiguration;
+	}
+
+	public boolean isSelf(Jid counterpart) {
+		return counterpart.equals(self.getFullJid());
+	}
+
+	public void resetChatState() {
+		synchronized (users) {
+			for(User user : users) {
+				user.chatState = Config.DEFAULT_CHATSTATE;
+			}
+		}
 	}
 
 	public enum Affiliation {
@@ -123,6 +140,7 @@ public class MucOptions {
 		MEMBERS_ONLY,
 		KICKED,
 		SHUTDOWN,
+		INVALID_NICK,
 		UNKNOWN
 	}
 
@@ -153,6 +171,7 @@ public class MucOptions {
 		private long pgpKeyId = 0;
 		private Avatar avatar;
 		private MucOptions options;
+		private ChatState chatState = Config.DEFAULT_CHATSTATE;
 
 		public User(MucOptions options, Jid from) {
 			this.options = options;
@@ -226,7 +245,13 @@ public class MucOptions {
 		}
 
 		public long getPgpKeyId() {
-			return this.pgpKeyId;
+			if (this.pgpKeyId != 0) {
+				return this.pgpKeyId;
+			} else if (realJid != null) {
+				return getAccount().getRoster().getContact(realJid).getPgpKeyId();
+			} else {
+				return 0;
+			}
 		}
 
 		public Contact getContact() {
@@ -254,6 +279,10 @@ public class MucOptions {
 
 		public Account getAccount() {
 			return options.getAccount();
+		}
+
+		public Conversation getConversation() {
+			return options.getConversation();
 		}
 
 		public Jid getFullJid() {
@@ -318,20 +347,26 @@ public class MucOptions {
 		public Jid getRealJid() {
 			return realJid;
 		}
+
+		public boolean setChatState(ChatState chatState) {
+			if (this.chatState == chatState) {
+				return false;
+			}
+			this.chatState = chatState;
+			return true;
+		}
 	}
 
 	private Account account;
 	private final Set<User> users = new HashSet<>();
 	private final List<String> features = new ArrayList<>();
 	private Data form = new Data();
-	private Conversation conversation;
+	private final Conversation conversation;
 	private boolean isOnline = false;
 	private Error error = Error.NONE;
 	public OnRenameListener onRenameListener = null;
 	private User self;
-	private String subject = null;
 	private String password = null;
-	public boolean mNickChangingInProgress = false;
 
 	public MucOptions(Conversation conversation) {
 		this.account = conversation.getAccount();
@@ -362,6 +397,11 @@ public class MucOptions {
 		return self.getRole().ranks(Role.MODERATOR) || (field != null && "1".equals(field.getValue()));
 	}
 
+	public boolean allowPm() {
+		Field field = this.form.getFieldByName("muc#roomconfig_allowpm");
+		return field == null || "1".equals(field.getValue());
+	}
+
 	public boolean participating() {
 		return !online()
 				|| self.getRole().ranks(Role.PARTICIPANT)
@@ -373,12 +413,19 @@ public class MucOptions {
 	}
 
 	public boolean mamSupport() {
-		// Update with "urn:xmpp:mam:1" once we support it
-		return hasFeature("urn:xmpp:mam:0");
+		return hasFeature(Namespace.MAM) || hasFeature(Namespace.MAM_LEGACY);
+	}
+
+	public boolean mamLegacy() {
+		return hasFeature(Namespace.MAM_LEGACY) && !hasFeature(Namespace.MAM);
 	}
 
 	public boolean nonanonymous() {
 		return hasFeature("muc_nonanonymous");
+	}
+
+	public boolean isPrivateAndNonAnonymous() {
+		return membersOnly() && nonanonymous();
 	}
 
 	public boolean persistent() {
@@ -418,13 +465,16 @@ public class MucOptions {
 		return user;
 	}
 
-	public void updateUser(User user) {
+	//returns true if real jid was new;
+	public boolean updateUser(User user) {
 		User old;
+		boolean realJidFound = false;
 		if (user.fullJid == null && user.realJid != null) {
 			old = findUserByRealJid(user.realJid);
+			realJidFound = old != null;
 			if (old != null) {
 				if (old.fullJid != null) {
-					return; //don't add. user already exists
+					return false; //don't add. user already exists
 				} else {
 					synchronized (users) {
 						users.remove(old);
@@ -433,6 +483,7 @@ public class MucOptions {
 			}
 		} else if (user.realJid != null) {
 			old = findUserByRealJid(user.realJid);
+			realJidFound = old != null;
 			synchronized (users) {
 				if (old != null && old.fullJid == null) {
 					users.remove(old);
@@ -444,11 +495,15 @@ public class MucOptions {
 			if (old != null) {
 				users.remove(old);
 			}
+			boolean fullJidIsSelf = isOnline && user.getFullJid() != null && user.getFullJid().equals(self.getFullJid());
 			if ((!membersOnly() || user.getAffiliation().ranks(Affiliation.MEMBER))
-					&& user.getAffiliation().outranks(Affiliation.OUTCAST)){
+					&& user.getAffiliation().outranks(Affiliation.OUTCAST)
+					&& !fullJidIsSelf){
 				this.users.add(user);
+				return !realJidFound && user.realJid != null;
 			}
 		}
+		return false;
 	}
 
 	public User findUserByFullJid(Jid jid) {
@@ -465,7 +520,7 @@ public class MucOptions {
 		return null;
 	}
 
-	private User findUserByRealJid(Jid jid) {
+	public User findUserByRealJid(Jid jid) {
 		if (jid == null) {
 			return null;
 		}
@@ -477,6 +532,21 @@ public class MucOptions {
 			}
 		}
 		return null;
+	}
+
+	public User findUser(ReadByMarker readByMarker) {
+		if (readByMarker.getRealJid() != null) {
+			User user = findUserByRealJid(readByMarker.getRealJid().toBareJid());
+			if (user == null) {
+				user = new User(this,readByMarker.getFullJid());
+				user.setRealJid(readByMarker.getRealJid());
+			}
+			return user;
+		} else if (readByMarker.getFullJid() != null) {
+			return findUserByFullJid(readByMarker.getFullJid());
+		} else {
+			return null;
+		}
 	}
 
 	public boolean isContactInRoom(Contact contact) {
@@ -492,8 +562,10 @@ public class MucOptions {
 		this.error = error;
 	}
 
-	public void setOnline() {
+	public boolean setOnline() {
+		boolean before = this.isOnline;
 		this.isOnline = true;
+		return !before;
 	}
 
 	public ArrayList<User> getUsers() {
@@ -513,6 +585,21 @@ public class MucOptions {
 				}
 				return onlineUsers;
 			}
+		}
+	}
+
+	public ArrayList<User> getUsersWithChatState(ChatState state, int max) {
+		synchronized (users) {
+			ArrayList<User> list = new ArrayList<>();
+			for(User user : users) {
+				if (user.chatState == state) {
+					list.add(user);
+					if (list.size() >= max) {
+						break;
+					}
+				}
+			}
+			return list;
 		}
 	}
 
@@ -539,7 +626,7 @@ public class MucOptions {
 		}
 	}
 
-	public String getProposedNick() {
+	private String getProposedNick() {
 		if (conversation.getBookmark() != null
 				&& conversation.getBookmark().getNick() != null
 				&& !conversation.getBookmark().getNick().trim().isEmpty()) {
@@ -547,7 +634,7 @@ public class MucOptions {
 		} else if (!conversation.getJid().isBareJid()) {
 			return conversation.getJid().getResourcepart();
 		} else {
-			return account.getUsername();
+			return JidHelper.localPartOrFallback(account.getJid());
 		}
 	}
 
@@ -583,30 +670,45 @@ public class MucOptions {
 		return self;
 	}
 
-	public void setSubject(String content) {
-		this.subject = content;
+	public boolean setSubject(String subject) {
+		return this.conversation.setAttribute("subject",subject);
 	}
 
 	public String getSubject() {
-		return this.subject;
+		return this.conversation.getAttribute("subject");
+	}
+
+	public List<User> getFallbackUsersFromCryptoTargets() {
+		List<User> users = new ArrayList<>();
+		for(Jid jid : conversation.getAcceptedCryptoTargets()) {
+			User user = new User(this,null);
+			user.setRealJid(jid);
+			users.add(user);
+		}
+		return users;
+	}
+
+	public List<User> getUsersRelevantForNameAndAvatar() {
+		final List<User> users;
+		if (isOnline) {
+			users = getUsers(5);
+		} else {
+			users = getFallbackUsersFromCryptoTargets();
+		}
+		return users;
 	}
 
 	public String createNameFromParticipants() {
-		if (getUserCount() >= 2) {
-			List<String> names = new ArrayList<>();
-			for (User user : getUsers(5)) {
-				Contact contact = user.getContact();
-				if (contact != null && !contact.getDisplayName().isEmpty()) {
-					names.add(contact.getDisplayName().split("\\s+")[0]);
-				} else if (user.getName() != null){
-					names.add(user.getName());
-				}
-			}
+		List<User> users = getUsersRelevantForNameAndAvatar();
+		if (users.size() >= 2) {
 			StringBuilder builder = new StringBuilder();
-			for (int i = 0; i < names.size(); ++i) {
-				builder.append(names.get(i));
-				if (i != names.size() - 1) {
+			for (User user : users) {
+				if (builder.length() != 0) {
 					builder.append(", ");
+				}
+				String name = UIHelper.getDisplayName(user);
+				if (name != null) {
+					builder.append(name.split("\\s+")[0]);
 				}
 			}
 			return builder.toString();

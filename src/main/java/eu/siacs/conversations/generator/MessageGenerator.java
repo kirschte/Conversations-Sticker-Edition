@@ -18,6 +18,7 @@ import eu.siacs.conversations.entities.Conversation;
 import eu.siacs.conversations.entities.Message;
 import eu.siacs.conversations.services.XmppConnectionService;
 import eu.siacs.conversations.xml.Element;
+import eu.siacs.conversations.xml.Namespace;
 import eu.siacs.conversations.xmpp.chatstate.ChatState;
 import eu.siacs.conversations.xmpp.jid.Jid;
 import eu.siacs.conversations.xmpp.stanzas.MessagePacket;
@@ -35,16 +36,17 @@ public class MessageGenerator extends AbstractGenerator {
 		Conversation conversation = message.getConversation();
 		Account account = conversation.getAccount();
 		MessagePacket packet = new MessagePacket();
+		final boolean isWithSelf = conversation.getContact().isSelf();
 		if (conversation.getMode() == Conversation.MODE_SINGLE) {
 			packet.setTo(message.getCounterpart());
 			packet.setType(MessagePacket.TYPE_CHAT);
-			packet.addChild("markable", "urn:xmpp:chat-markers:0");
-			if (this.mXmppConnectionService.indicateReceived()) {
+			if (this.mXmppConnectionService.indicateReceived() && !isWithSelf) {
 				packet.addChild("request", "urn:xmpp:receipts");
 			}
 		} else if (message.getType() == Message.TYPE_PRIVATE) {
 			packet.setTo(message.getCounterpart());
 			packet.setType(MessagePacket.TYPE_CHAT);
+			packet.addChild("x","http://jabber.org/protocol/muc#user");
 			if (this.mXmppConnectionService.indicateReceived()) {
 				packet.addChild("request", "urn:xmpp:receipts");
 			}
@@ -52,8 +54,12 @@ public class MessageGenerator extends AbstractGenerator {
 			packet.setTo(message.getCounterpart().toBareJid());
 			packet.setType(MessagePacket.TYPE_GROUPCHAT);
 		}
+		if (conversation.isSingleOrPrivateAndNonAnonymous() && message.getType() != Message.TYPE_PRIVATE) {
+			packet.addChild("markable", "urn:xmpp:chat-markers:0");
+		}
 		packet.setFrom(account.getJid());
 		packet.setId(message.getUuid());
+		packet.addChild("origin-id", Namespace.STANZA_IDS).setAttribute("id",message.getUuid());
 		if (message.edited()) {
 			packet.addChild("replace","urn:xmpp:message-correct:0").setAttribute("id",message.getEditedId());
 		}
@@ -78,6 +84,18 @@ public class MessageGenerator extends AbstractGenerator {
 		if (Config.supportUnencrypted() && !recipientSupportsOmemo(message)) {
 			packet.setBody(OMEMO_FALLBACK_MESSAGE);
 		}
+		packet.addChild("store", "urn:xmpp:hints");
+		packet.addChild("encryption","urn:xmpp:eme:0")
+				.setAttribute("name","OMEMO")
+				.setAttribute("namespace",AxolotlService.PEP_PREFIX);
+		return packet;
+	}
+
+	public MessagePacket generateKeyTransportMessage(Jid to, XmppAxolotlMessage axolotlMessage) {
+		MessagePacket packet = new MessagePacket();
+		packet.setType(MessagePacket.TYPE_CHAT);
+		packet.setTo(to);
+		packet.setAxolotlMessage(axolotlMessage.toElement());
 		packet.addChild("store", "urn:xmpp:hints");
 		return packet;
 	}
@@ -109,6 +127,8 @@ public class MessageGenerator extends AbstractGenerator {
 				content = message.getBody();
 			}
 			packet.setBody(otrSession.transformSending(content)[0]);
+			packet.addChild("encryption","urn:xmpp:eme:0")
+					.setAttribute("namespace","urn:xmpp:otr:0");
 			return packet;
 		} catch (OtrException e) {
 			return null;
@@ -121,7 +141,7 @@ public class MessageGenerator extends AbstractGenerator {
 		if (message.hasFileOnRemoteHost()) {
 			Message.FileParams fileParams = message.getFileParams();
 			content = fileParams.url.toString();
-			packet.addChild("x","jabber:x:oob").addChild("url").setContent(content);
+			packet.addChild("x",Namespace.OOB).addChild("url").setContent(content);
 		} else {
 			content = message.getBody();
 		}
@@ -131,13 +151,21 @@ public class MessageGenerator extends AbstractGenerator {
 
 	public MessagePacket generatePgpChat(Message message) {
 		MessagePacket packet = preparePacket(message);
-		if (Config.supportUnencrypted()) {
-			packet.setBody(PGP_FALLBACK_MESSAGE);
-		}
-		if (message.getEncryption() == Message.ENCRYPTION_DECRYPTED) {
-			packet.addChild("x", "jabber:x:encrypted").setContent(message.getEncryptedBody());
-		} else if (message.getEncryption() == Message.ENCRYPTION_PGP) {
-			packet.addChild("x", "jabber:x:encrypted").setContent(message.getBody());
+		if (message.hasFileOnRemoteHost()) {
+			final String url = message.getFileParams().url.toString();
+			packet.setBody(url);
+			packet.addChild("x",Namespace.OOB).addChild("url").setContent(url);
+		} else {
+			if (Config.supportUnencrypted()) {
+				packet.setBody(PGP_FALLBACK_MESSAGE);
+			}
+			if (message.getEncryption() == Message.ENCRYPTION_DECRYPTED) {
+				packet.addChild("x", "jabber:x:encrypted").setContent(message.getEncryptedBody());
+			} else if (message.getEncryption() == Message.ENCRYPTION_PGP) {
+				packet.addChild("x", "jabber:x:encrypted").setContent(message.getBody());
+			}
+			packet.addChild("encryption", "urn:xmpp:eme:0")
+					.setAttribute("namespace", "jabber:x:encrypted");
 		}
 		return packet;
 	}
@@ -145,7 +173,7 @@ public class MessageGenerator extends AbstractGenerator {
 	public MessagePacket generateChatState(Conversation conversation) {
 		final Account account = conversation.getAccount();
 		MessagePacket packet = new MessagePacket();
-		packet.setType(MessagePacket.TYPE_CHAT);
+		packet.setType(conversation.getMode() == Conversation.MODE_MULTI ? MessagePacket.TYPE_GROUPCHAT : MessagePacket.TYPE_CHAT);
 		packet.setTo(conversation.getJid().toBareJid());
 		packet.setFrom(account.getJid());
 		packet.addChild(ChatState.toElement(conversation.getOutgoingChatState()));
@@ -154,13 +182,16 @@ public class MessageGenerator extends AbstractGenerator {
 		return packet;
 	}
 
-	public MessagePacket confirm(final Account account, final Jid to, final String id) {
+	public MessagePacket confirm(final Account account, final Jid to, final String id, final Jid counterpart, final boolean groupChat) {
 		MessagePacket packet = new MessagePacket();
-		packet.setType(MessagePacket.TYPE_CHAT);
-		packet.setTo(to);
+		packet.setType(groupChat ? MessagePacket.TYPE_GROUPCHAT : MessagePacket.TYPE_CHAT);
+		packet.setTo(groupChat ? to.toBareJid() : to);
 		packet.setFrom(account.getJid());
-		Element received = packet.addChild("displayed","urn:xmpp:chat-markers:0");
-		received.setAttribute("id", id);
+		Element displayed = packet.addChild("displayed","urn:xmpp:chat-markers:0");
+		displayed.setAttribute("id", id);
+		if (groupChat && counterpart != null) {
+			displayed.setAttribute("sender",counterpart.toPreppedString());
+		}
 		packet.addChild("store", "urn:xmpp:hints");
 		return packet;
 	}
@@ -211,7 +242,17 @@ public class MessageGenerator extends AbstractGenerator {
 		for(String namespace : namespaces) {
 			receivedPacket.addChild("received", namespace).setAttribute("id", originalMessage.getId());
 		}
+		receivedPacket.addChild("store", "urn:xmpp:hints");
 		return receivedPacket;
+	}
+
+	public MessagePacket received(Account account, Jid to, String id) {
+		MessagePacket packet = new MessagePacket();
+		packet.setFrom(account.getJid());
+		packet.setTo(to);
+		packet.addChild("received","urn:xmpp:receipts").setAttribute("id",id);
+		packet.addChild("store", "urn:xmpp:hints");
+		return packet;
 	}
 
 	public MessagePacket generateOtrError(Jid to, String id, String errorText) {

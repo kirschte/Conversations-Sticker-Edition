@@ -3,14 +3,25 @@ package eu.siacs.conversations.entities;
 import android.content.ContentValues;
 import android.database.Cursor;
 import android.text.SpannableStringBuilder;
+import android.util.Log;
+
+import org.json.JSONArray;
+import org.json.JSONException;
 
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Set;
 
 import eu.siacs.conversations.Config;
 import eu.siacs.conversations.crypto.axolotl.FingerprintStatus;
-import eu.siacs.conversations.crypto.axolotl.XmppAxolotlSession;
+import eu.siacs.conversations.http.AesGcmURLStreamHandler;
+import eu.siacs.conversations.ui.adapter.MessageAdapter;
 import eu.siacs.conversations.utils.CryptoHelper;
+import eu.siacs.conversations.utils.Emoticons;
 import eu.siacs.conversations.utils.GeoHelper;
 import eu.siacs.conversations.utils.MimeUtils;
 import eu.siacs.conversations.utils.UIHelper;
@@ -60,6 +71,8 @@ public class Message extends AbstractEntity {
 	public static final String FINGERPRINT = "axolotl_fingerprint";
 	public static final String READ = "read";
 	public static final String ERROR_MESSAGE = "errorMsg";
+	public static final String READ_BY_MARKERS = "readByMarkers";
+	public static final String MARKABLE = "markable";
 	public static final String ME_COMMAND = "/me ";
 
 
@@ -80,15 +93,22 @@ public class Message extends AbstractEntity {
 	protected boolean read = true;
 	protected String remoteMsgId = null;
 	protected String serverMsgId = null;
-	protected Conversation conversation = null;
+	private final Conversation conversation;
 	protected Transferable transferable = null;
 	private Message mNextMessage = null;
 	private Message mPreviousMessage = null;
 	private String axolotlFingerprint = null;
 	private String errorMessage = null;
+	private Set<ReadByMarker> readByMarkers = new HashSet<>();
 
-	private Message() {
+	private Boolean isGeoUri = null;
+	private Boolean isEmojisOnly = null;
+	private Boolean treatAsDownloadable = null;
+	private FileParams fileParams = null;
+	private List<MucOptions.User> counterparts;
 
+	private Message(Conversation conversation) {
+		this.conversation = conversation;
 	}
 
 	public Message(Conversation conversation, String body, int encryption) {
@@ -96,7 +116,7 @@ public class Message extends AbstractEntity {
 	}
 
 	public Message(Conversation conversation, String body, int encryption, int status) {
-		this(java.util.UUID.randomUUID().toString(),
+		this(conversation, java.util.UUID.randomUUID().toString(),
 				conversation.getUuid(),
 				conversation.getJid() == null ? null : conversation.getJid().toBareJid(),
 				null,
@@ -113,16 +133,19 @@ public class Message extends AbstractEntity {
 				true,
 				null,
 				false,
-				null);
-		this.conversation = conversation;
+				null,
+				null,
+				false);
 	}
 
-	private Message(final String uuid, final String conversationUUid, final Jid counterpart,
+	private Message(final Conversation conversation, final String uuid, final String conversationUUid, final Jid counterpart,
 					final Jid trueCounterpart, final String body, final long timeSent,
 					final int encryption, final int status, final int type, final boolean carbon,
 					final String remoteMsgId, final String relativeFilePath,
 					final String serverMsgId, final String fingerprint, final boolean read,
-					final String edited, final boolean oob, final String errorMessage) {
+					final String edited, final boolean oob, final String errorMessage, final Set<ReadByMarker> readByMarkers,
+	                final boolean markable) {
+		this.conversation = conversation;
 		this.uuid = uuid;
 		this.conversationUuid = conversationUUid;
 		this.counterpart = counterpart;
@@ -141,9 +164,11 @@ public class Message extends AbstractEntity {
 		this.edited = edited;
 		this.oob = oob;
 		this.errorMessage = errorMessage;
+		this.readByMarkers = readByMarkers == null ? new HashSet<ReadByMarker>() : readByMarkers;
+		this.markable = markable;
 	}
 
-	public static Message fromCursor(Cursor cursor) {
+	public static Message fromCursor(Cursor cursor, Conversation conversation) {
 		Jid jid;
 		try {
 			String value = cursor.getString(cursor.getColumnIndex(COUNTERPART));
@@ -154,6 +179,8 @@ public class Message extends AbstractEntity {
 			}
 		} catch (InvalidJidException e) {
 			jid = null;
+		} catch (IllegalStateException e) {
+			return null; // message too long?
 		}
 		Jid trueCounterpart;
 		try {
@@ -166,7 +193,8 @@ public class Message extends AbstractEntity {
 		} catch (InvalidJidException e) {
 			trueCounterpart = null;
 		}
-		return new Message(cursor.getString(cursor.getColumnIndex(UUID)),
+		return new Message(conversation,
+				cursor.getString(cursor.getColumnIndex(UUID)),
 				cursor.getString(cursor.getColumnIndex(CONVERSATION)),
 				jid,
 				trueCounterpart,
@@ -183,23 +211,32 @@ public class Message extends AbstractEntity {
 				cursor.getInt(cursor.getColumnIndex(READ)) > 0,
 				cursor.getString(cursor.getColumnIndex(EDITED)),
 				cursor.getInt(cursor.getColumnIndex(OOB)) > 0,
-				cursor.getString(cursor.getColumnIndex(ERROR_MESSAGE)));
+				cursor.getString(cursor.getColumnIndex(ERROR_MESSAGE)),
+				ReadByMarker.fromJsonString(cursor.getString(cursor.getColumnIndex(READ_BY_MARKERS))),
+				cursor.getInt(cursor.getColumnIndex(MARKABLE)) > 0);
 	}
 
 	public static Message createStatusMessage(Conversation conversation, String body) {
-		final Message message = new Message();
+		final Message message = new Message(conversation);
 		message.setType(Message.TYPE_STATUS);
-		message.setConversation(conversation);
-		message.setBody(body);
+		message.setStatus(Message.STATUS_RECEIVED);
+		message.body = body;
 		return message;
 	}
 
 	public static Message createLoadMoreMessage(Conversation conversation) {
-		final Message message = new Message();
+		final Message message = new Message(conversation);
 		message.setType(Message.TYPE_STATUS);
-		message.setConversation(conversation);
-		message.setBody("LOAD_MORE");
+		message.body = "LOAD_MORE";
 		return message;
+	}
+
+	public static Message createDateSeparator(Message message) {
+		final Message separator = new Message(message.getConversation());
+		separator.setType(Message.TYPE_STATUS);
+		separator.body = MessageAdapter.DATE_SEPARATOR_BODY;
+		separator.setTime(message.getTimeSent());
+		return separator;
 	}
 
 	@Override
@@ -217,7 +254,7 @@ public class Message extends AbstractEntity {
 		} else {
 			values.put(TRUE_COUNTERPART, trueCounterpart.toPreppedString());
 		}
-		values.put(BODY, body);
+		values.put(BODY, body.length() > Config.MAX_STORAGE_MESSAGE_CHARS ? body.substring(0,Config.MAX_STORAGE_MESSAGE_CHARS) : body);
 		values.put(TIME_SENT, timeSent);
 		values.put(ENCRYPTION, encryption);
 		values.put(STATUS, status);
@@ -231,6 +268,8 @@ public class Message extends AbstractEntity {
 		values.put(EDITED, edited);
 		values.put(OOB, oob ? 1 : 0);
 		values.put(ERROR_MESSAGE,errorMessage);
+		values.put(READ_BY_MARKERS,ReadByMarker.toJson(readByMarkers).toString());
+		values.put(MARKABLE, markable ? 1 : 0);
 		return values;
 	}
 
@@ -240,10 +279,6 @@ public class Message extends AbstractEntity {
 
 	public Conversation getConversation() {
 		return this.conversation;
-	}
-
-	public void setConversation(Conversation conv) {
-		this.conversation = conv;
 	}
 
 	public Jid getCounterpart() {
@@ -271,11 +306,15 @@ public class Message extends AbstractEntity {
 		return body;
 	}
 
-	public void setBody(String body) {
+	public synchronized void setBody(String body) {
 		if (body == null) {
 			throw new Error("You should not set the message body to null");
 		}
 		this.body = body;
+		this.isGeoUri = null;
+		this.isEmojisOnly = null;
+		this.treatAsDownloadable = null;
+		this.fileParams = null;
 	}
 
 	public String getErrorMessage() {
@@ -393,8 +432,39 @@ public class Message extends AbstractEntity {
 		return this.transferable;
 	}
 
-	public void setTransferable(Transferable transferable) {
+	public synchronized void setTransferable(Transferable transferable) {
+		this.fileParams = null;
 		this.transferable = transferable;
+	}
+
+	public boolean addReadByMarker(ReadByMarker readByMarker) {
+		if (readByMarker.getRealJid() != null) {
+			if (readByMarker.getRealJid().toBareJid().equals(trueCounterpart)) {
+				return false;
+			}
+		} else if (readByMarker.getFullJid() != null) {
+			if (readByMarker.getFullJid().equals(counterpart)) {
+				return false;
+			}
+		}
+		if (this.readByMarkers.add(readByMarker)) {
+			if (readByMarker.getRealJid() != null && readByMarker.getFullJid() != null) {
+				Iterator<ReadByMarker> iterator = this.readByMarkers.iterator();
+				while (iterator.hasNext()) {
+					ReadByMarker marker = iterator.next();
+					if (marker.getRealJid() == null && readByMarker.getFullJid().equals(marker.getFullJid())) {
+						iterator.remove();
+					}
+				}
+			}
+			return true;
+		} else {
+			return false;
+		}
+	}
+
+	public Set<ReadByMarker> getReadByMarkers() {
+		return Collections.unmodifiableSet(this.readByMarkers);
 	}
 
 	public boolean similar(Message message) {
@@ -488,15 +558,18 @@ public class Message extends AbstractEntity {
 						this.edited() == message.edited() &&
 						(message.getTimeSent() - this.getTimeSent()) <= (Config.MESSAGE_MERGE_WINDOW * 1000) &&
 						this.getBody().length() + message.getBody().length() <= Config.MAX_DISPLAY_MESSAGE_CHARS &&
-						!GeoHelper.isGeoUri(message.getBody()) &&
-						!GeoHelper.isGeoUri(this.body) &&
-						message.treatAsDownloadable() == Decision.NEVER &&
-						this.treatAsDownloadable() == Decision.NEVER &&
+						!message.isGeoUri()&&
+						!this.isGeoUri() &&
+						!message.treatAsDownloadable() &&
+						!this.treatAsDownloadable() &&
 						!message.getBody().startsWith(ME_COMMAND) &&
 						!this.getBody().startsWith(ME_COMMAND) &&
-						!this.bodyIsHeart() &&
-						!message.bodyIsHeart() &&
-						((this.axolotlFingerprint == null && message.axolotlFingerprint == null) || this.axolotlFingerprint.equals(message.getFingerprint()))
+						!this.bodyIsOnlyEmojis() &&
+						!message.bodyIsOnlyEmojis() &&
+						((this.axolotlFingerprint == null && message.axolotlFingerprint == null) || this.axolotlFingerprint.equals(message.getFingerprint())) &&
+						UIHelper.sameDay(message.getTimeSent(),this.getTimeSent()) &&
+						this.getReadByMarkers().equals(message.getReadByMarkers()) &&
+						!this.conversation.getJid().toBareJid().toString().equals(Config.BUG_REPORTS)
 				);
 	}
 
@@ -504,11 +577,18 @@ public class Message extends AbstractEntity {
 		return a == b || (
 				(a == Message.STATUS_SEND_RECEIVED && b == Message.STATUS_UNSEND)
 						|| (a == Message.STATUS_SEND_RECEIVED && b == Message.STATUS_SEND)
-						|| (a == Message.STATUS_UNSEND && b == Message.STATUS_SEND)
-						|| (a == Message.STATUS_UNSEND && b == Message.STATUS_SEND_RECEIVED)
+						|| (a == Message.STATUS_SEND_RECEIVED && b == Message.STATUS_WAITING)
 						|| (a == Message.STATUS_SEND && b == Message.STATUS_UNSEND)
-						|| (a == Message.STATUS_SEND && b == Message.STATUS_SEND_RECEIVED)
+						|| (a == Message.STATUS_SEND && b == Message.STATUS_WAITING)
 		);
+	}
+
+	public void setCounterparts(List<MucOptions.User> counterparts) {
+		this.counterparts = counterparts;
+	}
+
+	public List<MucOptions.User> getCounterparts() {
+		return this.counterparts;
 	}
 
 	public static class MergeSeparator {}
@@ -566,7 +646,7 @@ public class Message extends AbstractEntity {
 
 	public boolean trusted() {
 		Contact contact = this.getContact();
-		return (status > STATUS_RECEIVED || (contact != null && contact.mutualPresenceSubscription()));
+		return status > STATUS_RECEIVED || (contact != null && (contact.mutualPresenceSubscription() || contact.isSelf()));
 	}
 
 	public boolean fixCounterpart() {
@@ -601,183 +681,122 @@ public class Message extends AbstractEntity {
 		this.oob = isOob;
 	}
 
-	public enum Decision {
-		MUST,
-		SHOULD,
-		NEVER,
-	}
-
-	private static String extractRelevantExtension(URL url) {
-		String path = url.getPath();
-		return extractRelevantExtension(path);
-	}
-
-	private static String extractRelevantExtension(String path) {
-		if (path == null || path.isEmpty()) {
-			return null;
-		}
-
-		String filename = path.substring(path.lastIndexOf('/') + 1).toLowerCase();
-		int dotPosition = filename.lastIndexOf(".");
-
-		if (dotPosition != -1) {
-			String extension = filename.substring(dotPosition + 1);
-			// we want the real file extension, not the crypto one
-			if (Transferable.VALID_CRYPTO_EXTENSIONS.contains(extension)) {
-				return extractRelevantExtension(filename.substring(0,dotPosition));
-			} else {
-				return extension;
-			}
-		}
-		return null;
-	}
-
 	public String getMimeType() {
+		String extension;
 		if (relativeFilePath != null) {
-			int start = relativeFilePath.lastIndexOf('.') + 1;
-			if (start < relativeFilePath.length()) {
-				return MimeUtils.guessMimeTypeFromExtension(relativeFilePath.substring(start));
-			} else {
-				return null;
-			}
+			extension = MimeUtils.extractRelevantExtension(relativeFilePath);
 		} else {
 			try {
-				return MimeUtils.guessMimeTypeFromExtension(extractRelevantExtension(new URL(body.trim())));
+				final URL url = new URL(body.split("\n")[0]);
+				extension = MimeUtils.extractRelevantExtension(url);
 			} catch (MalformedURLException e) {
 				return null;
 			}
 		}
+		return MimeUtils.guessMimeTypeFromExtension(extension);
 	}
 
-	public Decision treatAsDownloadable() {
-		if (body.trim().contains(" ")) {
-			return Decision.NEVER;
-		}
-		try {
-			URL url = new URL(body);
-			if (!url.getProtocol().equalsIgnoreCase("http") && !url.getProtocol().equalsIgnoreCase("https")) {
-				return Decision.NEVER;
-			} else if (oob) {
-				return Decision.MUST;
-			}
-			String extension = extractRelevantExtension(url);
-			if (extension == null) {
-				return Decision.NEVER;
-			}
-			String ref = url.getRef();
-			boolean encrypted = ref != null && ref.matches("([A-Fa-f0-9]{2}){48}");
-
-			if (encrypted) {
-				return Decision.MUST;
-			} else if (Transferable.VALID_IMAGE_EXTENSIONS.contains(extension)
-					|| Transferable.WELL_KNOWN_EXTENSIONS.contains(extension)) {
-				return Decision.SHOULD;
-			} else {
-				return Decision.NEVER;
-			}
-
-		} catch (MalformedURLException e) {
-			return Decision.NEVER;
-		}
-	}
-
-	public boolean bodyIsHeart() {
-		return body != null && UIHelper.HEARTS.contains(body.trim());
-	}
-
-	public FileParams getFileParams() {
-		FileParams params = getLegacyFileParams();
-		if (params != null) {
-			return params;
-		}
-		params = new FileParams();
-		if (this.transferable != null) {
-			params.size = this.transferable.getFileSize();
-		}
-		if (body == null) {
-			return params;
-		}
-		String parts[] = body.split("\\|");
-		switch (parts.length) {
-			case 1:
-				try {
-					params.size = Long.parseLong(parts[0]);
-				} catch (NumberFormatException e) {
-					try {
-						params.url = new URL(parts[0]);
-					} catch (MalformedURLException e1) {
-						params.url = null;
+	public synchronized boolean treatAsDownloadable() {
+		if (treatAsDownloadable == null) {
+			try {
+				final String[] lines = body.split("\n");
+				if (lines.length ==0) {
+					treatAsDownloadable = false;
+					return false;
+				}
+				for(String line : lines) {
+					if (line.contains("\\s+")) {
+						treatAsDownloadable = false;
+						return false;
 					}
 				}
-				break;
-			case 2:
-			case 4:
-				try {
-					params.url = new URL(parts[0]);
-				} catch (MalformedURLException e1) {
-					params.url = null;
-				}
-				try {
-					params.size = Long.parseLong(parts[1]);
-				} catch (NumberFormatException e) {
-					params.size = 0;
-				}
-				try {
-					params.width = Integer.parseInt(parts[2]);
-				} catch (NumberFormatException | ArrayIndexOutOfBoundsException e) {
-					params.width = 0;
-				}
-				try {
-					params.height = Integer.parseInt(parts[3]);
-				} catch (NumberFormatException | ArrayIndexOutOfBoundsException e) {
-					params.height = 0;
-				}
-				break;
-			case 3:
-				try {
-					params.size = Long.parseLong(parts[0]);
-				} catch (NumberFormatException e) {
-					params.size = 0;
-				}
-				try {
-					params.width = Integer.parseInt(parts[1]);
-				} catch (NumberFormatException e) {
-					params.width = 0;
-				}
-				try {
-					params.height = Integer.parseInt(parts[2]);
-				} catch (NumberFormatException e) {
-					params.height = 0;
-				}
-				break;
+				final URL url = new URL(lines[0]);
+				final String ref = url.getRef();
+				final String protocol = url.getProtocol();
+				final boolean encrypted = ref != null && AesGcmURLStreamHandler.IV_KEY.matcher(ref).matches();
+				final boolean followedByDataUri = lines.length == 2 && lines[1].startsWith("data:");
+				final boolean validAesGcm = AesGcmURLStreamHandler.PROTOCOL_NAME.equalsIgnoreCase(protocol) && encrypted && (lines.length == 1 || followedByDataUri);
+				final boolean validOob = ("http".equalsIgnoreCase(protocol) || "https".equalsIgnoreCase(protocol)) && (oob || encrypted) && lines.length == 1;
+				treatAsDownloadable = validAesGcm || validOob;
+			} catch (MalformedURLException e) {
+				treatAsDownloadable = false;
+			}
 		}
-		return params;
+		return treatAsDownloadable;
 	}
 
-	public FileParams getLegacyFileParams() {
-		FileParams params = new FileParams();
-		if (body == null) {
-			return params;
+	public synchronized boolean bodyIsOnlyEmojis() {
+		if (isEmojisOnly == null) {
+			isEmojisOnly = Emoticons.isOnlyEmoji(body.replaceAll("\\s",""));
 		}
-		String parts[] = body.split(",");
-		if (parts.length == 3) {
-			try {
-				params.size = Long.parseLong(parts[0]);
-			} catch (NumberFormatException e) {
-				return null;
+		return isEmojisOnly;
+	}
+
+	public synchronized boolean isGeoUri() {
+		if (isGeoUri == null) {
+			isGeoUri = GeoHelper.GEO_URI.matcher(body).matches();
+		}
+		return isGeoUri;
+	}
+
+	public synchronized void resetFileParams() {
+		this.fileParams = null;
+	}
+
+	public synchronized FileParams getFileParams() {
+		if (fileParams == null) {
+			fileParams = new FileParams();
+			if (this.transferable != null) {
+				fileParams.size = this.transferable.getFileSize();
 			}
-			try {
-				params.width = Integer.parseInt(parts[1]);
-			} catch (NumberFormatException e) {
-				return null;
+			String parts[] = body == null ? new String[0] : body.split("\\|");
+			switch (parts.length) {
+				case 1:
+					try {
+						fileParams.size = Long.parseLong(parts[0]);
+					} catch (NumberFormatException e) {
+						fileParams.url = parseUrl(parts[0]);
+					}
+					break;
+				case 5:
+					fileParams.runtime = parseInt(parts[4]);
+				case 4:
+					fileParams.width = parseInt(parts[2]);
+					fileParams.height = parseInt(parts[3]);
+				case 2:
+					fileParams.url = parseUrl(parts[0]);
+					fileParams.size = parseLong(parts[1]);
+					break;
+				case 3:
+					fileParams.size = parseLong(parts[0]);
+					fileParams.width = parseInt(parts[1]);
+					fileParams.height = parseInt(parts[2]);
+					break;
 			}
-			try {
-				params.height = Integer.parseInt(parts[2]);
-			} catch (NumberFormatException e) {
-				return null;
-			}
-			return params;
-		} else {
+		}
+		return fileParams;
+	}
+
+	private static long parseLong(String value) {
+		try {
+			return Long.parseLong(value);
+		} catch (NumberFormatException e) {
+			return 0;
+		}
+	}
+
+	private static int parseInt(String value) {
+		try {
+			return Integer.parseInt(value);
+		} catch (NumberFormatException e) {
+			return 0;
+		}
+	}
+
+	private static URL parseUrl(String value) {
+		try {
+			return new URL(value);
+		} catch (MalformedURLException e) {
 			return null;
 		}
 	}
@@ -804,6 +823,7 @@ public class Message extends AbstractEntity {
 		public long size = 0;
 		public int width = 0;
 		public int height = 0;
+		public int runtime = 0;
 	}
 
 	public void setFingerprint(String fingerprint) {

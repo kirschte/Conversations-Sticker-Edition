@@ -209,12 +209,11 @@ public class PgpEngine {
 		});
 	}
 
-	public void generateSignature(final Account account, String status,
-			final UiCallback<Account> callback) {
+	public void generateSignature(Intent intent, final Account account, String status, final UiCallback<Account> callback) {
 		if (account.getPgpId() == 0) {
 			return;
 		}
-		Intent params = new Intent();
+		Intent params = intent == null ? new Intent() : intent;
 		params.setAction(OpenPgpApi.ACTION_CLEARTEXT_SIGN);
 		params.putExtra(OpenPgpApi.EXTRA_REQUEST_ASCII_ARMOR, true);
 		params.putExtra(OpenPgpApi.EXTRA_SIGN_KEY_ID, account.getPgpId());
@@ -304,9 +303,6 @@ public class PgpEngine {
 		}
 	}
 
-	public PendingIntent getIntentForKey(Contact contact) {
-		return getIntentForKey(contact.getPgpKeyId());
-	}
 
 	public PendingIntent getIntentForKey(long pgpKeyId) {
 		Intent params = new Intent();

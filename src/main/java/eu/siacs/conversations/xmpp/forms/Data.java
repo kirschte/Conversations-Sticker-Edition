@@ -1,11 +1,14 @@
 package eu.siacs.conversations.xmpp.forms;
 
+import android.os.Bundle;
+
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;
 
 import eu.siacs.conversations.xml.Element;
+import eu.siacs.conversations.xml.Namespace;
 
 public class Data extends Element {
 
@@ -13,7 +16,7 @@ public class Data extends Element {
 
 	public Data() {
 		super("x");
-		this.setAttribute("xmlns","jabber:x:data");
+		this.setAttribute("xmlns", Namespace.DATA);
 	}
 
 	public List<Field> getFields() {
@@ -37,13 +40,14 @@ public class Data extends Element {
 		return null;
 	}
 
-	public void put(String name, String value) {
+	public Field put(String name, String value) {
 		Field field = getFieldByName(name);
 		if (field == null) {
 			field = new Field(name);
 			this.addChild(field);
 		}
 		field.setValue(value);
+		return field;
 	}
 
 	public void put(String name, Collection<String> values) {
@@ -53,6 +57,15 @@ public class Data extends Element {
 			this.addChild(field);
 		}
 		field.setValues(values);
+	}
+
+	public void submit(Bundle options) {
+		for (Field field : getFields()) {
+			if (options.containsKey(field.getFieldName())) {
+				field.setValue(options.getString(field.getFieldName()));
+			}
+		}
+		submit();
 	}
 
 	public void submit() {
@@ -80,7 +93,8 @@ public class Data extends Element {
 	}
 
 	public void setFormType(String formType) {
-		this.put(FORM_TYPE, formType);
+		Field field = this.put(FORM_TYPE, formType);
+		field.setAttribute("type","hidden");
 	}
 
 	public String getFormType() {
@@ -96,4 +110,16 @@ public class Data extends Element {
 	public String getTitle() {
 		return findChildContent("title");
 	}
+
+
+	public static Data create(String type, Bundle bundle) {
+		Data data = new Data();
+		data.setFormType(type);
+		data.setAttribute("type","submit");
+		for(String key : bundle.keySet()) {
+			data.put(key,bundle.getString(key));
+		}
+		return data;
+	}
+
 }

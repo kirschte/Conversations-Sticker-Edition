@@ -43,11 +43,12 @@ public final class Config {
 	public static final String MAGIC_CREATE_DOMAIN = "conversations.im";
 	public static final boolean DISALLOW_REGISTRATION_IN_UI = false; //hide the register checkbox
 
+	public static final boolean USE_RANDOM_RESOURCE_ON_EVERY_BIND = false;
+
 	public static final boolean ALLOW_NON_TLS_CONNECTIONS = false; //very dangerous. you should have a good reason to set this to true
 	public static final boolean FORCE_ORBOT = false; // always use TOR
 	public static final boolean HIDE_MESSAGE_TEXT_IN_NOTIFICATION = false;
 	public static final boolean SHOW_CONNECTED_ACCOUNTS = false; //show number of connected accounts in foreground notification
-	public static final boolean SHOW_DISABLE_FOREGROUND = false; //if set to true the foreground notification has a button to disable it
 
 	public static final boolean ALWAYS_NOTIFY_BY_DEFAULT = false;
 
@@ -62,12 +63,12 @@ public final class Config {
 	public static final int MINI_GRACE_PERIOD = 750;
 
 	public static final int AVATAR_SIZE = 192;
-	public static final Bitmap.CompressFormat AVATAR_FORMAT = Bitmap.CompressFormat.WEBP;
+	public static final Bitmap.CompressFormat AVATAR_FORMAT = Bitmap.CompressFormat.JPEG;
+	public static final int AVATAR_CHAR_LIMIT = 9400;
 
 	public static final int IMAGE_SIZE = 1920;
 	public static final Bitmap.CompressFormat IMAGE_FORMAT = Bitmap.CompressFormat.JPEG;
 	public static final int IMAGE_QUALITY = 75;
-	public static final int IMAGE_MAX_SIZE = 524288; //512KiB
 
 	public static final int MESSAGE_MERGE_WINDOW = 20;
 
@@ -77,12 +78,14 @@ public final class Config {
 	public static final int REFRESH_UI_INTERVAL = 500;
 
 	public static final int MAX_DISPLAY_MESSAGE_CHARS = 4096;
+	public static final int MAX_STORAGE_MESSAGE_CHARS = 1024 * 1024 * 1024;
 
 	public static final long MILLISECONDS_IN_DAY = 24 * 60 * 60 * 1000;
 
 	public static final long OMEMO_AUTO_EXPIRY = 7 * MILLISECONDS_IN_DAY;
 	public static final boolean REMOVE_BROKEN_DEVICES = false;
 	public static final boolean OMEMO_PADDING = false;
+	public static final boolean PUT_AUTH_TAG_INTO_KEY = true;
 
 
 	public static final boolean DISABLE_PROXY_LOOKUP = false; //useful to debug ibb
@@ -94,24 +97,19 @@ public final class Config {
 
 	public static final boolean ENCRYPT_ON_HTTP_UPLOADED = false;
 
-	public static final boolean REPORT_WRONG_FILESIZE_IN_OTR_JINGLE = true;
-
 	public static final boolean X509_VERIFICATION = false; //use x509 certificates to verify OMEMO keys
 
 	public static final boolean ONLY_INTERNAL_STORAGE = false; //use internal storage instead of sdcard to save attachments
 
 	public static final boolean IGNORE_ID_REWRITE_IN_MUC = true;
 
-	public static final boolean PARSE_REAL_JID_FROM_MUC_MAM = false; //dangerous if server doesn’t filter
-
-	public static final long MAM_MAX_CATCHUP =  MILLISECONDS_IN_DAY / 2;
-	public static final int MAM_MAX_MESSAGES = 500;
-
-	public static final long FREQUENT_RESTARTS_DETECTION_WINDOW = 12 * 60 * 60 * 1000; // 10 hours
-	public static final long FREQUENT_RESTARTS_THRESHOLD = 16;
+	public static final long MAM_MAX_CATCHUP =  MILLISECONDS_IN_DAY * 5;
+	public static final int MAM_MAX_MESSAGES = 750;
 
 	public static final ChatState DEFAULT_CHATSTATE = ChatState.ACTIVE;
 	public static final int TYPING_TIMEOUT = 8;
+
+	public static final int EXPIRY_INTERVAL = 30 * 60 * 1000; // 30 minutes
 
 	public static final String ENABLED_CIPHERS[] = {
 		"TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256",

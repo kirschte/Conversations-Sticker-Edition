@@ -29,7 +29,7 @@ import eu.siacs.conversations.entities.ListItem;
 import eu.siacs.conversations.xmpp.jid.Jid;
 
 public class ChooseContactActivity extends AbstractSearchableListItemActivity {
-	private List<String> mActivatedAccounts = new ArrayList<String>();
+	private List<String> mActivatedAccounts = new ArrayList<>();
 	private List<String> mKnownHosts;
 
 	private Set<Contact> selected;
@@ -61,7 +61,7 @@ public class ChooseContactActivity extends AbstractSearchableListItemActivity {
 							InputMethodManager.HIDE_IMPLICIT_ONLY);
 					MenuInflater inflater = getMenuInflater();
 					inflater.inflate(R.menu.select_multiple, menu);
-					selected = new HashSet<Contact>();
+					selected = new HashSet<>();
 					return true;
 				}
 
@@ -161,6 +161,10 @@ public class ChooseContactActivity extends AbstractSearchableListItemActivity {
 
 	protected void filterContacts(final String needle) {
 		getListItems().clear();
+		if (xmppConnectionService == null) {
+			getListItemAdapter().notifyDataSetChanged();
+			return;
+		}
 		for (final Account account : xmppConnectionService.getAccounts()) {
 			if (account.getStatus() != Account.State.DISABLED) {
 				for (final Contact contact : account.getRoster().getContacts()) {
@@ -230,7 +234,6 @@ public class ChooseContactActivity extends AbstractSearchableListItemActivity {
 	@Override
 	void onBackendConnected() {
 		filterContacts();
-
 		this.mActivatedAccounts.clear();
 		for (Account account : xmppConnectionService.getAccounts()) {
 			if (account.getStatus() != Account.State.DISABLED) {

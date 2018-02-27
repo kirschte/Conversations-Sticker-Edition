@@ -12,19 +12,26 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.VIBRATE" />
-    <uses-permission android:name="android.permission.NFC" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <uses-permission
         android:name="android.permission.READ_PHONE_STATE"
         tools:node="remove" />
 
+    <uses-sdk tools:overrideLibrary="net.ypresto.androidtranscoder" />
+
+
     <application
+        android:networkSecurityConfig="@xml/network_security_configuration"
         android:allowBackup="true"
         android:icon="@drawable/ic_launcher"
         android:label="@string/app_name"
         android:theme="@style/ConversationsTheme"
         tools:replace="android:label">
+
+        <meta-data android:name="com.google.android.gms.car.application"
+            android:resource="@xml/automotive_app_desc" />
+
         <service android:name=".services.XmppConnectionService" />
 
         <receiver android:name=".services.EventReceiver">
@@ -50,29 +57,14 @@
             </intent-filter>
         </activity>
         <activity
-            android:name=".ui.StartConversationActivity"
+            android:name=".ui.UriHandlerActivity"
             android:label="@string/title_activity_start_conversation"
-            android:launchMode="singleTask">
-            <intent-filter>
-                <action android:name="android.intent.action.SENDTO" />
-
-                <category android:name="android.intent.category.DEFAULT" />
-
-                <data android:scheme="imto" />
-                <data android:host="jabber" />
-            </intent-filter>
+            android:launchMode="singleTop">
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
 
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-
-                <data android:scheme="xmpp" />
-            </intent-filter>
-            <intent-filter>
-                <action android:name="android.nfc.action.NDEF_DISCOVERED" />
-
-                <category android:name="android.intent.category.DEFAULT" />
 
                 <data android:scheme="xmpp" />
             </intent-filter>
@@ -87,7 +79,19 @@
                 <data android:pathPrefix="/i/" />
                 <data android:pathPrefix="/j/" />
             </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SENDTO" />
 
+                <category android:name="android.intent.category.DEFAULT" />
+
+                <data android:scheme="imto" />
+                <data android:host="jabber" />
+            </intent-filter>
+        </activity>
+        <activity
+            android:name=".ui.StartConversationActivity"
+            android:label="@string/title_activity_start_conversation"
+            android:launchMode="singleTop">
         </activity>
         <activity
             android:name=".ui.WelcomeActivity"
@@ -101,7 +105,7 @@
             android:name=".ui.SetPresenceActivity"
             android:configChanges="orientation|screenSize"
             android:label="@string/change_presence"
-            android:launchMode="singleTask"
+            android:launchMode="singleTop"
             android:windowSoftInputMode="stateHidden|adjustResize" />
         <activity
             android:name=".ui.SettingsActivity"
@@ -120,16 +124,18 @@
             android:label="@string/title_activity_manage_accounts"
             android:launchMode="singleTask" />
         <activity
+            android:name=".ui.ShareViaAccountActivity"
+            android:label="@string/title_activity_share_via_account"
+            android:launchMode="singleTop" />
+        <activity
             android:name=".ui.EditAccountActivity"
-            android:launchMode="singleTask"
+            android:launchMode="singleTop"
             android:windowSoftInputMode="stateHidden|adjustResize" />
         <activity
             android:name=".ui.ConferenceDetailsActivity"
-            android:label="@string/title_activity_conference_details"
             android:windowSoftInputMode="stateHidden" />
         <activity
             android:name=".ui.ContactDetailsActivity"
-            android:label="@string/title_activity_contact_details"
             android:windowSoftInputMode="stateHidden" />
         <activity
             android:name=".ui.PublishProfilePictureActivity"
@@ -141,7 +147,8 @@
             android:windowSoftInputMode="stateHidden" />
         <activity
             android:name=".ui.ShareWithActivity"
-            android:label="@string/app_name">
+            android:label="@string/app_name"
+            android:launchMode="singleTop">
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
 

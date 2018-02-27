@@ -18,15 +18,8 @@ import android.widget.ScrollView;
 import android.widget.Spinner;
 import android.widget.TextView;
 
-import android.util.Log;
-
-import org.openintents.openpgp.util.OpenPgpApi;
-
 import java.util.List;
-import java.util.concurrent.RunnableFuture;
-import java.util.concurrent.atomic.AtomicBoolean;
 
-import eu.siacs.conversations.Config;
 import eu.siacs.conversations.R;
 import eu.siacs.conversations.entities.Account;
 import eu.siacs.conversations.entities.ListItem;
@@ -101,7 +94,7 @@ public class SetPresenceActivity extends XmppActivity implements View.OnClickLis
 		if (resultCode == RESULT_OK) {
 			if (xmppConnectionServiceBound && mAccount != null) {
 				if (requestCode == REQUEST_ANNOUNCE_PGP) {
-					announcePgp(mAccount, null, onPresenceChanged);
+					announcePgp(mAccount, null,data, onPresenceChanged);
 				}
 				this.mPostponedActivityResult = null;
 			} else {
@@ -123,7 +116,7 @@ public class SetPresenceActivity extends XmppActivity implements View.OnClickLis
 				finish();
 			} else {
 				xmppConnectionService.changeStatus(mAccount, status, statusMessage, false);
-				announcePgp(mAccount, null, onPresenceChanged);
+				announcePgp(mAccount, null,null, onPresenceChanged);
 			}
 		}
 	}

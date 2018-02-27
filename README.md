@@ -1,8 +1,31 @@
-# Conversations
+<h1 align="center">Conversations</h1>
 
-Conversations: the very last word in instant messaging
+<p align="center">Conversations: the very last word in instant messaging</p>
 
-[![Google Play](https://conversations.im/images/en-play-badge.png)](https://play.google.com/store/apps/details?id=eu.siacs.conversations&referrer=utm_source%3Dgithub) [![Amazon App Store](https://images-na.ssl-images-amazon.com/images/G/01/AmazonMobileApps/amazon-apps-store-us-black.png)](http://www.amazon.com/dp/B00WD35AAC/)
+<p align="center">
+    <a href="https://conversations.im/j/conversations@conference.siacs.eu">
+        <img src="https://inverse.chat/badge.svg?room=conversations@conference.siacs.eu"
+             alt="chat on our conference room">
+    </a>
+    <a href="https://travis-ci.org/siacs/Conversations">
+        <img src="https://travis-ci.org/siacs/Conversations.svg?branch=development"
+             alt="build status">
+    </a>
+    <a href="https://bountysource.com/teams/siacs">
+        <img src="https://api.bountysource.com/badge/tracker?tracker_id=519483" alt="Bountysource">
+    </a>
+</p>
+
+<p align="center">
+    <a href="https://play.google.com/store/apps/details?id=eu.siacs.conversations&amp;referrer=utm_source%3Dgithub">
+       <img src="https://conversations.im/images/en-play-badge.png"
+            alt="Google Play">
+            </a>
+    <a href="http://www.amazon.com/dp/B00WD35AAC/">
+        <img src="https://images-na.ssl-images-amazon.com/images/G/01/AmazonMobileApps/amazon-apps-store-us-black.png"
+             alt="Amazon App Store">
+    </a>
+</p>
 
 ![screenshots](https://raw.githubusercontent.com/siacs/Conversations/master/screenshots.png)
 
@@ -59,32 +82,6 @@ run your own XMPP server for you and your friends. These XEP's are:
 * [XEP-0363: HTTP File Upload](http://xmpp.org/extensions/xep-0363.html) allows you to share files in conferences
   and with offline contacts.
 
-## Team
-
-#### Head of Development
-
-* [Daniel Gultsch](https://github.com/inputmice)
-
-#### Code Contributions
-
-(In order of appearance)
-
-* [Rene Treffer](https://github.com/rtreffer) ([PRs](https://github.com/siacs/Conversations/pulls?utf8=%E2%9C%93&q=is%3Apr+author%3Artreffer+is%3Amerged))
-* [Andreas Straub](https://github.com/strb) ([PRs](https://github.com/siacs/Conversations/pulls?utf8=%E2%9C%93&q=is%3Apr+author%3Astrb+is%3Amerged))
-* [Alethea Butler](https://github.com/alethea) ([PRs](https://github.com/siacs/Conversations/pulls?utf8=%E2%9C%93&q=is%3Apr+author%3Aalethea+is%3Amerged))
-* [M. Dietrich](https://github.com/emdete) ([PRs](https://github.com/siacs/Conversations/pulls?utf8=%E2%9C%93&q=is%3Apr+author%3Aemdete+is%3Amerged))
-* [betheg](https://github.com/betheg) ([PRs](https://github.com/siacs/Conversations/pulls?utf8=%E2%9C%93&q=is%3Apr+author%3Abetheg+is%3Amerged))
-* [Sam Whited](https://github.com/SamWhited) ([PRs](https://github.com/siacs/Conversations/pulls?utf8=%E2%9C%93&q=is%3Apr+author%3ASamWhited+is%3Amerged))
-* [BrianBlade](https://github.com/BrianBlade) ([PRs](https://github.com/siacs/Conversations/pulls?utf8=%E2%9C%93&q=is%3Apr+author%3ABrianBlade+is%3Amerged))
-
-#### Logo
-* [Ilia Rostovtsev](https://github.com/qooob) (Progress)
-* [Diego Turtulici](http://efesto.eigenlab.org/~diesys) (Original)
-* [fiaxh](https://github.com/fiaxh) (OMEMO)
-
-#### Translations
-Translations are managed on [Transifex](https://www.transifex.com/projects/p/conversations/)
-
 ## FAQ
 
 ### General
@@ -103,7 +100,7 @@ Buying the App from the Play Store will also give you access to our [beta test](
 
 #### I don't have a Google Account but I would still like to make a contribution
 
-I accept donations over PayPal, Bitcoin and Flattr. For donations via PayPal you
+I accept donations over PayPal, bank transfer and various crypto currencies. For donations via PayPal you
 can use the email address `donate@siacs.eu` or the button below.
 
 [![Donate with PayPal](https://www.paypalobjects.com/en_US/i/btn/btn_donate_LG.gif)](https://www.paypal.com/cgi-bin/webscr?cmd=_s-xclick&hosted_button_id=CW3SYT3KG5PDL)
@@ -112,16 +109,24 @@ can use the email address `donate@siacs.eu` or the button below.
 larger contributions please get in touch with me beforehand and we can talk
 about bank transfer (SEPA).
 
-My Bitcoin Address is: `1NxSU1YxYzJVDpX1rcESAA3NJki7kRgeeu`
+##### Crypto currencies
 
+Bitcoin: `1AeqNAcg85APAZj9BZfAjdFCC5zesqXp2B`
 
-[![Flattr this!](http://api.flattr.com/button/flattr-badge-large.png)](https://flattr.com/submit/auto?user_id=inputmice&url=http%3A%2F%2Fconversations.siacs.eu&title=Conversations&tags=github&category=software)
+Bitcoin Cash: `16ABkXzYAwWz8Y5DcWFfbBRqL63g3hzEaU`
+
+Ether: `0x5c4e5239cd9c6f4a909e4e8361526e2e3c8ba9fa`
 
 #### How do I create an account?
 XMPP, like email, is a federated protocol, which means that there is not one company you can create an *official XMPP account* with. Instead there are hundreds, or even thousands, of providers out there. One of those providers is our very own [conversations.im](https://account.conversations.im). If you don’t like to use *conversations.im* use a web search engine of your choice to find another provider. Or maybe your university has one. Or you can run your own. Or ask a friend to run one. Once you've found one, you can use Conversations to create an account. Just select *register new account* on server within the create account dialog.
 
+##### Domain hosting
+Using your own domain not only gives you a more recognizable Jabber ID, it also gives you the flexibility to migrate your account between different XMPP providers. This is a good compromise between the responsibilities of having to operate your own server and the downsides of being dependent on a single provider.
+
+Learn more about [conversations.im Jabber/XMPP domain hosting](https://account.conversations.im/domain/). 
+
 ##### Running your own
-If you have a server somewhere and are willing to put some work in, the best alternative-in the spirit of federation-is to run your own. We recommend either [Prosody](https://prosody.im/) or [ejabberd](https://www.ejabberd.im/). Both of which have their own strengths. Ejabberd is slightly more mature nowadays but Prosody is arguably easier to set up.
+If you already have a server somewhere and are willing and able to put the necessary work in, one alternative-in the spirit of federation-is to run your own. We recommend either [Prosody](https://prosody.im/) or [ejabberd](https://www.ejabberd.im/). Both of which have their own strengths. Ejabberd is slightly more mature nowadays but Prosody is arguably easier to set up.
 
 For Prosody you need a couple of so called [community modules](https://modules.prosody.im/) most of which are maintained by the same people that develop Prosody.
 
@@ -141,11 +146,22 @@ As regular user you should be picking a different server. The server you selecte
 is probably insecure and/or very old.
 
 If you are a server administrator you should make sure that your server provides
-STARTTLS. XMPP over TLS (on a different port) is not sufficient.
+either STARTTLS or [XEP-0368: SRV records for XMPP over TLS](https://xmpp.org/extensions/xep-0368.html).
 
 On rare occasions this error message might also be caused by a server not providing
 a login (SASL) mechanism that Conversations is able to handle. Conversations supports
 SCRAM-SHA1, PLAIN, EXTERNAL (client certs) and DIGEST-MD5.
+
+#### I get 'Bind failure'. What does that mean?
+
+Some Bind failures are transient and resolve themselves after a reconnect.
+
+When trying to connect to OpenFire the bind failure can be a permanent problem when the domain part of the Jabber ID entered in Conversations doesn’t match the domain the OpenFire server feels responsible for. For example OpenFire is configured to use the domain `a.tld` but the Jabber ID entered is `user@b.tld` where `b.tld` also points to the same host. During bind OpenFire tries to reassign the Jabber to `user@a.tld`. Conversations doesn’t like that.
+This can be fixed by creating a new account in Conversations that uses the Jabber ID `user@a.tld`. 
+
+Note: This is kind of a weird quirk in OpenFire. Most other servers would just throw a 'Server not responsible for domain' error instead of attempting to reassign the Jabber ID.
+
+Maybe you attempted to use the Jabber ID `test@b.tld` because `a.tld` doesn’t point to the correct host. In that case you might have to enable the extended connection settings in the expert settings of Conversations and set a host name.
 
 #### How do XEP-0357: Push Notifications work?
 You need to be running the Play Store version of Conversations and your server needs to support push notifications.¹ Because *Google Cloud Notifications (GCM)* are tied with an API key to a specific app your server can not initiate the push message directly. Instead your server will send the push notification to the Conversations App server (operated by us) which then acts as a proxy and initiates the push message for you. The push message sent from our App server through GCM doesn’t contain any personal information. It is just an empty message which will wake up your device and tell Conversations to reconnect to your server. The information send from your server to our App server depends on the configuration of your server but can be limited to your account name. (In any case the Conversations App server won't redirect any information through GCM even if your server sends this information.)
@@ -156,7 +172,7 @@ If you don’t want this simply pick a server which does not offer Push Notifica
 
  ¹ Your server only needs to support the server side of [XEP-0357: Push Notifications](http://xmpp.org/extensions/xep-0357.html). If you use the Play Store version you do **not** need to run your own app server. The server modules are called *mod_cloud_notify* on Prosody and *mod_push* on ejabberd.
 
-#### Conversations doesn't work for me. Where can I get help?
+#### Conversations doesn’t work for me. Where can I get help?
 
 You can join our conference room on `conversations@conference.siacs.eu`.
 A lot of people in there are able to answer basic questions about the usage of
@@ -242,10 +258,13 @@ Making these status and priority optional isn't a solution either because
 Conversations is trying to get rid of old behaviours and set an example for
 other clients.
 
+#### Translations
+Translations are managed on [Transifex](https://www.transifex.com/projects/p/conversations/)
+
 #### How do I backup / move Conversations to a new device?
 On the one hand Conversations supports Message Archive Management to keep a server side history of your messages so when migrating to a new device that device can display your entire history. However that does not work if you enable OMEMO due to its forward secrecy. (Read [The State of Mobile XMPP in 2016](https://gultsch.de/xmpp_2016.html) especially the section on encryption.)
 
-If you migrate to a new device and would still like to keep your history please use a third party backup tool like [oandbackup](https://github.com/jensstein/oandbackup) or ```adb backup``` from your computer.  It is important that your deactivate your account before backup and activate it only after a succesful restore. Otherwise OMEMO might not work afterwards. 
+If you migrate to a new device and would still like to keep your history please use a third party backup tool like [oandbackup](https://github.com/jensstein/oandbackup) (needs root access on the device) or ```adb backup``` (no root access needed) from your computer.  It is important that you deactivate your account before backup and activate it only after a successful restore, otherwise OMEMO might not work afterwards. Also, remember that you can **only** transfer the backup to either the same version of Android or to a newer one (eg. 5.1.1 -> 5.1.1 or 5.1.1 -> 6.0.1).
 
 #### Conversations is missing a certain feature
 
@@ -293,7 +312,7 @@ To use OpenPGP you have to install the open source app
 manage accounts and choose renew PGP announcement from the contextual menu.
 
 #### OMEMO is grayed out. What do I do?
-OMEMO has two requirments: Your server and the server of your contact need to support PEP. Both of you can verify that indivually by opening your account details and selecting ```Server info``` from the menu. The appearing table should list PEP as available. The second requirement is mutal presence subscription. You can verify that be going into the contact details and see if the both check boxes *Send presence updates* and *Receive presence updates* are checked.
+OMEMO has two requirements: Your server and the server of your contact need to support PEP. Both of you can verify that individually by opening your account details and selecting ```Server info``` from the menu. The appearing table should list PEP as available. The second requirement is mutual presence subscription. You can verify that by opening the contact details and see if both check boxes *Send presence updates* and *Receive presence updates* are checked.
 
 #### How does the encryption for conferences work?
 
@@ -320,7 +339,7 @@ is disabled.
 Every participant has to announce their OpenPGP key (see answer above).
 If you would like to send encrypted messages to a conference you have to make
 sure that you have every participant's public key in your OpenKeychain.
-Right now there is no check in Conversations to ensurethat.
+Right now there is no check in Conversations to ensure that.
 You have to take care of that yourself. Go to the conference details and
 touch every key id (The hexadecimal number below a contact). This will send you
 to OpenKeychain which will assist you on adding the key.  This works best in
@@ -330,7 +349,7 @@ XEP-0027 with conferences. (The XEP neither specifically allows nor disallows
 this.)
 
 #### Why is Conversations not end-to-end encrypted by default
-We briefly had OMEMO as the default E2EE but it turned out to be a usabilty nightmare and thus we reverted that. You can find more information in [the commit message](https://github.com/siacs/Conversations/commit/035d0c79572d5981c53d1bff7f30b484c6542f17) of that change.
+We briefly had OMEMO as the default E2EE but it turned out to be a usability nightmare and thus we reverted that. You can find more information in [the commit message](https://github.com/siacs/Conversations/commit/035d0c79572d5981c53d1bff7f30b484c6542f17) of that change.
 
 Quick reminder that Conversations **always** uses TLS to connect to your server. It won‘t even connect to a server without TLS.
 
@@ -340,10 +359,10 @@ Read more about the concept on https://gultsch.de/trust.html
 
 ### What clients do I use on other platforms
 There are XMPP Clients available for all major platforms.
-####Windows / Linux
-For your desktop computer we recommend that you use [Gajim](https://gajim.org). You need to install the plugins `OMEMO`, `HTTP Upload` and `URL image preview` to get the best compatibiltiy with Conversations. Plugins can be installed from within the app.
-####iOS
-Unfortunatly we don‘t have a recommendation for iPhones right now. There are two clients available [ChatSecure](https://chatsecure.org/) and [Monal](https://monal.im/). Both with their own pros and cons.
+#### Windows / Linux
+For your desktop computer we recommend that you use [Gajim](https://gajim.org). You need to install the plugins `OMEMO`, `HTTP Upload` and `URL image preview` to get the best compatibility with Conversations. Plugins can be installed from within the app.
+#### iOS
+Unfortunately we don‘t have a recommendation for iPhones right now. There are two clients available [ChatSecure](https://chatsecure.org/) and [Monal](https://monal.im/). Both with their own pros and cons.
 
 
 ### Development
@@ -351,10 +370,7 @@ Unfortunatly we don‘t have a recommendation for iPhones right now. There are t
 <a name="beta"></a>
 #### Beta testing
 If you bought the App on [Google Play](https://play.google.com/store/apps/details?id=eu.siacs.conversations)
-you can get access to the latest beta version by joining the
-[Conversations Beta Testers](https://plus.google.com/communities/107649347599361240873)
-community on Google+ and then using [this link](https://play.google.com/apps/testing/eu.siacs.conversations)
-to sign up for the beta test.
+you can get access to the the latest beta version by signing up using [this link](https://play.google.com/apps/testing/eu.siacs.conversations).
 
 #### How do I build Conversations
 

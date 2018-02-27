@@ -7,6 +7,7 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.SharedPreferences.OnSharedPreferenceChangeListener;
 import android.content.pm.PackageManager;
+import android.content.pm.ResolveInfo;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -42,8 +43,13 @@ public class SettingsActivity extends XmppActivity implements
 	public static final String KEEP_FOREGROUND_SERVICE = "enable_foreground_service";
 	public static final String AWAY_WHEN_SCREEN_IS_OFF = "away_when_screen_off";
 	public static final String TREAT_VIBRATE_AS_SILENT = "treat_vibrate_as_silent";
+	public static final String DND_ON_SILENT_MODE = "dnd_on_silent_mode";
 	public static final String MANUALLY_CHANGE_PRESENCE = "manually_change_presence";
 	public static final String BLIND_TRUST_BEFORE_VERIFICATION = "btbv";
+	public static final String AUTOMATIC_MESSAGE_DELETION = "automatic_message_deletion";
+	public static final String BROADCAST_LAST_ACTIVITY = "last_activity";
+	public static final String THEME = "theme";
+	public static final String SHOW_DYNAMIC_TAGS = "show_dynamic_tags";
 
 	public static final int REQUEST_WRITE_LOGS = 0xbf8701;
 	private SettingsFragment mSettingsFragment;
@@ -90,6 +96,17 @@ public class SettingsActivity extends XmppActivity implements
 			PreferenceScreen expert = (PreferenceScreen) mSettingsFragment.findPreference("expert");
 			if (connectionOptions != null) {
 				expert.removePreference(connectionOptions);
+			}
+		}
+
+		//this feature is only available on Huawei Android 6.
+		PreferenceScreen huaweiPreferenceScreen = (PreferenceScreen) mSettingsFragment.findPreference("huawei");
+		if (huaweiPreferenceScreen != null) {
+			Intent intent = huaweiPreferenceScreen.getIntent();
+			//remove when Api version is above M (Version 6.0) or if the intent is not callable
+			if (Build.VERSION.SDK_INT > Build.VERSION_CODES.M || !isCallable(intent)) {
+				PreferenceCategory generalCategory = (PreferenceCategory) mSettingsFragment.findPreference("general");
+				generalCategory.removePreference(huaweiPreferenceScreen);
 			}
 		}
 
@@ -217,6 +234,11 @@ public class SettingsActivity extends XmppActivity implements
 		});
 	}
 
+	private boolean isCallable(final Intent i) {
+		return i != null && getPackageManager().queryIntentActivities(i, PackageManager.MATCH_DEFAULT_ONLY).size() > 0;
+	}
+
+
 	private void cleanCache() {
 		Intent intent = new Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
 		intent.setData(Uri.parse("package:" + getPackageName()));
@@ -273,7 +295,7 @@ public class SettingsActivity extends XmppActivity implements
 		builder.setTitle(R.string.pref_delete_omemo_identities);
 		final List<CharSequence> accounts = new ArrayList<>();
 		for(Account account : xmppConnectionService.getAccounts()) {
-			if (!account.isOptionSet(Account.OPTION_DISABLED)) {
+			if (account.isEnabled()) {
 				accounts.add(account.getJid().toBareJid().toString());
 			}
 		}
@@ -328,19 +350,19 @@ public class SettingsActivity extends XmppActivity implements
 	public void onSharedPreferenceChanged(SharedPreferences preferences, String name) {
 		final List<String> resendPresence = Arrays.asList(
 				"confirm_messages",
-				"xa_on_silent_mode",
+				DND_ON_SILENT_MODE,
 				AWAY_WHEN_SCREEN_IS_OFF,
 				"allow_message_correction",
 				TREAT_VIBRATE_AS_SILENT,
 				MANUALLY_CHANGE_PRESENCE,
-				"last_activity");
+				BROADCAST_LAST_ACTIVITY);
 		if (name.equals("resource")) {
 			String resource = preferences.getString("resource", "mobile")
 					.toLowerCase(Locale.US);
 			if (xmppConnectionServiceBound) {
 				for (Account account : xmppConnectionService.getAccounts()) {
 					if (account.setResource(resource)) {
-						if (!account.isOptionSet(Account.OPTION_DISABLED)) {
+						if (account.isEnabled()) {
 							XmppConnection connection = account.getXmppConnection();
 							if (connection != null) {
 								connection.resetStreamId();
@@ -351,10 +373,6 @@ public class SettingsActivity extends XmppActivity implements
 				}
 			}
 		} else if (name.equals(KEEP_FOREGROUND_SERVICE)) {
-			boolean foreground_service = preferences.getBoolean(KEEP_FOREGROUND_SERVICE,false);
-			if (!foreground_service) {
-				xmppConnectionService.clearStartTimeCounter();
-			}
 			xmppConnectionService.toggleForegroundService();
 		} else if (resendPresence.contains(name)) {
 			if (xmppConnectionServiceBound) {
@@ -371,6 +389,13 @@ public class SettingsActivity extends XmppActivity implements
 			reconnectAccounts();
 		} else if (name.equals("use_tor")) {
 			reconnectAccounts();
+		} else if (name.equals(AUTOMATIC_MESSAGE_DELETION)) {
+			xmppConnectionService.expireOldMessages(true);
+		} else if (name.equals(THEME)) {
+			final int theme = findTheme();
+			if (this.mTheme != theme) {
+				recreate();
+			}
 		}
 
 	}
@@ -402,7 +427,7 @@ public class SettingsActivity extends XmppActivity implements
 
 	private void reconnectAccounts() {
 		for (Account account : xmppConnectionService.getAccounts()) {
-			if (!account.isOptionSet(Account.OPTION_DISABLED)) {
+			if (account.isEnabled()) {
 				xmppConnectionService.reconnectAccountInBackground(account);
 			}
 		}

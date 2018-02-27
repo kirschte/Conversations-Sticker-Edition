@@ -52,6 +52,7 @@
 		<item>@string/none</item>
 		<item>@string/recently_used</item>
 		<item>@string/attach_take_picture</item>
+		<item>@string/attach_record_video</item>
 		<item>@string/attach_choose_picture</item>
 		<item>@string/attach_record_voice</item>
 		<item>@string/send_location</item>
@@ -60,10 +61,11 @@
 	<string-array name="quick_action_values">
 		<item>none</item>
 		<item>recent</item>
-		<item>photo</item>
-		<item>picture</item>
-		<item>voice</item>
-		<item>location</item>
+		<item>TAKE_PHOTO</item>
+		<item>RECORD_VIDEO</item>
+		<item>CHOOSE_PICTURE</item>
+		<item>RECORD_VOICE</item>
+		<item>SEND_LOCATION</item>
 	</string-array>
 
 	<string-array name="picture_compression_values">
@@ -102,5 +104,19 @@
 		<item>144</item>
 		<item>610</item>
 		<item>2584</item>
+	</string-array>
+	<string-array name="automatic_message_deletion_values">
+		<item>0</item>
+		<item>86400</item>
+		<item>604800</item>
+		<item>2592000</item>
+		<item>15811200</item>
+	</string-array>
+	<string-array name="automatic_message_deletion">
+		<item>@string/never</item>
+		<item>@string/timeout_24_hours</item>
+		<item>@string/timeout_7_days</item>
+		<item>@string/timeout_30_days</item>
+		<item>@string/timeout_6_months</item>
 	</string-array>
 </resources>

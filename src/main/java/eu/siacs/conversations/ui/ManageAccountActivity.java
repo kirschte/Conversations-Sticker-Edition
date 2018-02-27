@@ -31,6 +31,7 @@ import eu.siacs.conversations.entities.Account;
 import eu.siacs.conversations.services.XmppConnectionService;
 import eu.siacs.conversations.services.XmppConnectionService.OnAccountUpdate;
 import eu.siacs.conversations.ui.adapter.AccountAdapter;
+import eu.siacs.conversations.xmpp.XmppConnection;
 import eu.siacs.conversations.xmpp.jid.InvalidJidException;
 import eu.siacs.conversations.xmpp.jid.Jid;
 
@@ -126,15 +127,15 @@ public class ManageAccountActivity extends XmppActivity implements OnAccountUpda
 				R.menu.manageaccounts_context, menu);
 		AdapterContextMenuInfo acmi = (AdapterContextMenuInfo) menuInfo;
 		this.selectedAccount = accountList.get(acmi.position);
-		if (this.selectedAccount.isOptionSet(Account.OPTION_DISABLED)) {
+		if (this.selectedAccount.isEnabled()) {
+			menu.findItem(R.id.mgmt_account_enable).setVisible(false);
+			menu.findItem(R.id.mgmt_account_announce_pgp).setVisible(Config.supportOpenPgp());
+			menu.findItem(R.id.mgmt_account_change_presence).setVisible(manuallyChangePresence());
+		} else {
 			menu.findItem(R.id.mgmt_account_disable).setVisible(false);
 			menu.findItem(R.id.mgmt_account_announce_pgp).setVisible(false);
 			menu.findItem(R.id.mgmt_account_publish_avatar).setVisible(false);
 			menu.findItem(R.id.mgmt_account_change_presence).setVisible(false);
-		} else {
-			menu.findItem(R.id.mgmt_account_enable).setVisible(false);
-			menu.findItem(R.id.mgmt_account_announce_pgp).setVisible(Config.supportOpenPgp());
-			menu.findItem(R.id.mgmt_account_change_presence).setVisible(manuallyChangePresence());
 		}
 		menu.setHeaderTitle(this.selectedAccount.getJid().toBareJid().toString());
 	}
@@ -279,7 +280,7 @@ public class ManageAccountActivity extends XmppActivity implements OnAccountUpda
 		List<Account> list = new ArrayList<>();
 		synchronized (this.accountList) {
 			for (Account account : this.accountList) {
-				if (!account.isOptionSet(Account.OPTION_DISABLED)) {
+				if (account.isEnabled()) {
 					list.add(account);
 				}
 			}
@@ -292,7 +293,7 @@ public class ManageAccountActivity extends XmppActivity implements OnAccountUpda
 	private boolean accountsLeftToDisable() {
 		synchronized (this.accountList) {
 			for (Account account : this.accountList) {
-				if (!account.isOptionSet(Account.OPTION_DISABLED)) {
+				if (account.isEnabled()) {
 					return true;
 				}
 			}
@@ -303,7 +304,7 @@ public class ManageAccountActivity extends XmppActivity implements OnAccountUpda
 	private boolean accountsLeftToEnable() {
 		synchronized (this.accountList) {
 			for (Account account : this.accountList) {
-				if (account.isOptionSet(Account.OPTION_DISABLED)) {
+				if (!account.isEnabled()) {
 					return true;
 				}
 			}
@@ -315,7 +316,7 @@ public class ManageAccountActivity extends XmppActivity implements OnAccountUpda
 		List<Account> list = new ArrayList<>();
 		synchronized (this.accountList) {
 			for (Account account : this.accountList) {
-				if (account.isOptionSet(Account.OPTION_DISABLED)) {
+				if (!account.isEnabled()) {
 					list.add(account);
 				}
 			}
@@ -334,6 +335,10 @@ public class ManageAccountActivity extends XmppActivity implements OnAccountUpda
 
 	private void enableAccount(Account account) {
 		account.setOption(Account.OPTION_DISABLED, false);
+		final XmppConnection connection = account.getXmppConnection();
+		if (connection != null) {
+			connection.resetEverything();
+		}
 		if (!xmppConnectionService.updateAccount(account)) {
 			Toast.makeText(this,R.string.unable_to_update_account,Toast.LENGTH_SHORT).show();
 		}
@@ -341,24 +346,23 @@ public class ManageAccountActivity extends XmppActivity implements OnAccountUpda
 
 	private void publishOpenPGPPublicKey(Account account) {
 		if (ManageAccountActivity.this.hasPgp()) {
-			announcePgp(selectedAccount, null, onOpenPGPKeyPublished);
+			announcePgp(selectedAccount, null,null, onOpenPGPKeyPublished);
 		} else {
 			this.showInstallPgpDialog();
 		}
 	}
 
 	private void deleteAccount(final Account account) {
-		AlertDialog.Builder builder = new AlertDialog.Builder(
-				ManageAccountActivity.this);
+		AlertDialog.Builder builder = new AlertDialog.Builder(this);
 		builder.setTitle(getString(R.string.mgmt_account_are_you_sure));
 		builder.setIconAttribute(android.R.attr.alertDialogIcon);
 		builder.setMessage(getString(R.string.mgmt_account_delete_confirm_text));
 		builder.setPositiveButton(getString(R.string.delete),
-				new OnClickListener() {
-					@Override
-					public void onClick(DialogInterface dialog, int which) {
-						xmppConnectionService.deleteAccount(account);
-						selectedAccount = null;
+				(dialog, which) -> {
+					xmppConnectionService.deleteAccount(account);
+					selectedAccount = null;
+					if (xmppConnectionService.getAccounts().size() == 0 && Config.MAGIC_CREATE_DOMAIN != null) {
+						WelcomeActivity.launch(this);
 					}
 				});
 		builder.setNegativeButton(getString(R.string.cancel), null);
@@ -373,12 +377,12 @@ public class ManageAccountActivity extends XmppActivity implements OnAccountUpda
 				if (requestCode == REQUEST_CHOOSE_PGP_ID) {
 					if (data.getExtras().containsKey(OpenPgpApi.EXTRA_SIGN_KEY_ID)) {
 						selectedAccount.setPgpSignId(data.getExtras().getLong(OpenPgpApi.EXTRA_SIGN_KEY_ID));
-						announcePgp(selectedAccount, null, onOpenPGPKeyPublished);
+						announcePgp(selectedAccount, null, null, onOpenPGPKeyPublished);
 					} else {
 						choosePgpSignId(selectedAccount);
 					}
 				} else if (requestCode == REQUEST_ANNOUNCE_PGP) {
-					announcePgp(selectedAccount, null, onOpenPGPKeyPublished);
+					announcePgp(selectedAccount, null, data, onOpenPGPKeyPublished);
 				}
 				this.mPostponedActivityResult = null;
 			} else {
@@ -396,16 +400,14 @@ public class ManageAccountActivity extends XmppActivity implements OnAccountUpda
 
 	@Override
 	public void onAccountCreated(Account account) {
-		switchToAccount(account, true);
+		Intent intent = new Intent(this, EditAccountActivity.class);
+		intent.putExtra("jid", account.getJid().toBareJid().toString());
+		intent.putExtra("init", true);
+		startActivity(intent);
 	}
 
 	@Override
 	public void informUser(final int r) {
-		runOnUiThread(new Runnable() {
-			@Override
-			public void run() {
-				Toast.makeText(ManageAccountActivity.this, r, Toast.LENGTH_LONG).show();
-			}
-		});
+		runOnUiThread(() -> Toast.makeText(ManageAccountActivity.this, r, Toast.LENGTH_LONG).show());
 	}
 }
